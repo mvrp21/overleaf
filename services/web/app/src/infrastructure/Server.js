@@ -25,6 +25,7 @@ const bearerTokenMiddleware = require('express-bearer-token')
 
 const passport = require('passport')
 const LocalStrategy = require('passport-local').Strategy
+const OpenIDConnectStrategy = require('passport-openidconnect');
 
 const oneDayInMilliseconds = 86400000
 const ReferalConnect = require('../Features/Referal/ReferalConnect')
@@ -38,6 +39,9 @@ const HttpErrorHandler = require('../Features/Errors/HttpErrorHandler')
 const UserSessionsManager = require('../Features/User/UserSessionsManager')
 const AuthenticationController = require('../Features/Authentication/AuthenticationController')
 const SessionManager = require('../Features/Authentication/SessionManager')
+
+const UserRegistrationHandler = require('../Features/User/UserRegistrationHandler').promises;
+const UserGetter = require('../Features/User/UserGetter')
 const {
   hasAdminAccess,
 } = require('../Features/Helpers/AdminAuthorizationHelper')
@@ -217,6 +221,49 @@ passport.use(
     AuthenticationController.doPassportLogin
   )
 )
+if (process.env['OPENID_ENABLED'] === 'true') {
+  const crypto = require('crypto');
+  // had to rush to make this fork, so externally managed users will get a random password
+  async function genPass(length) {
+      return new Promise((res, rej) => {
+          crypto.randomBytes(length, (err, buffer) => {
+              if (err)
+                  return rej(err);
+              const randomString = buffer.toString('base64').slice(0, length);
+              res(randomString);
+          });
+      });
+  }
+  passport.use(new OpenIDConnectStrategy(
+    {
+      issuer: process.env['OPENID_ISSUER'],
+      authorizationURL: process.env['OPENID_AUTHORIZATION_URL'],
+      tokenURL: process.env['OPENID_TOKEN_URL'],
+      userInfoURL: process.env['OPENID_USERINFO_URL'],
+      clientID: process.env['OPENID_CLIENT_ID'],
+      clientSecret: process.env['OPENID_CLIENT_SECRET'],
+      callbackURL: '/oidc/redirect',
+      scope: [ 'profile' ]
+    },
+    async function verify(issuer, profile, cb) {
+      // TODO: proper profile to userDetails mapper configuration
+      const names = profile.displayName.split(' ');
+      const mid = (names.length + 1) / 2;
+      const userDetails = {
+        id: profile.id,
+        email: profile.username + "@inf.ufpr.br",
+        first_name: names.slice(0, mid).join(' '),
+        last_name: names.slice(mid).join(' '),
+        password: await genPass(64)
+      };
+      // wonder if this is right...
+      let user = await UserGetter.promises.getUserByAnyEmail(userDetails.email);
+      if (!user)
+        user = await UserRegistrationHandler.registerNewUser(userDetails);
+      return cb(null, user);
+    }
+  ))
+}
 passport.serializeUser(AuthenticationController.serializeUser)
 passport.deserializeUser(AuthenticationController.deserializeUser)
 

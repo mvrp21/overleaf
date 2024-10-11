@@ -232,6 +232,18 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
 
   webRouter.get('/login', UserPagesController.loginPage)
   AuthenticationController.addEndpointToLoginWhitelist('/login')
+  if (process.env['OPENID_ENABLED'] === 'true') {
+    webRouter.get(
+      '/oidc/login',
+      RateLimiterMiddleware.rateLimit(overleafLoginRateLimiter), // rate limit IP (20 / 60s)
+      RateLimiterMiddleware.loginRateLimitEmail, // rate limit email (10 / 120s)
+      // CaptchaMiddleware.validateCaptcha('login'),
+      AuthenticationController.oidcLogin
+    )
+    AuthenticationController.addEndpointToLoginWhitelist('/oidc/login')
+    webRouter.get('/oidc/redirect', AuthenticationController.oidcRedirect)
+    AuthenticationController.addEndpointToLoginWhitelist('/oidc/redirect')
+  }
 
   webRouter.post(
     '/login',
