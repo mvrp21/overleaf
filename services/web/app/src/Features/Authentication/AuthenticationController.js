@@ -97,6 +97,30 @@ const AuthenticationController = {
     cb(null, user)
   },
 
+  oidcLogin(req, res, next) {
+    passport.authenticate('openidconnect')(req, res, next)
+  },
+
+  oidcRedirect(req, res, next) {
+    passport.authenticate('openidconnect', {
+      keepSessionInfo: true,
+      successReturnToOrRedirect: '/',
+      failureRedirect: '/login'
+    }, async function(err, user, _) {
+      if (!user)
+        return res.status(401).json({redir:'/'});
+      if (err)
+        return next(err);
+      try {
+        // I have no idea what these do, I just copied the passportLogin below pretty much
+        await Modules.promises.hooks.fire('saasLogin', { email: user.email }, req);
+        await AuthenticationController.promises.finishLogin(user, req, res);
+      } catch (err) {
+        return next(err)
+      }
+    })(req,res,next)
+  },
+
   passportLogin(req, res, next) {
     // This function is middleware which wraps the passport.authenticate middleware,
     // so we can send back our custom `{message: {text: "", type: ""}}` responses on failure,

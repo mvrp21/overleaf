@@ -4,49 +4,106 @@ block vars
 	- bootstrap5PageStatus = 'disabled'
 
 block content
-	main.content.content-alt#main-content
-		.container
-			.row
-				.col-md-6.col-md-offset-3.col-lg-4.col-lg-offset-4
-					.card
-						.page-header
-							if title
-								h1 !{title}
-							else
-								h1 #{translate("log_in")}					
-						form(data-ol-async-form, name="loginForm", action='/login', method="POST")
-							input(name='_csrf', type='hidden', value=csrfToken)
-							+formMessages()
-							+customFormMessage('invalid-password-retry-or-reset', 'danger')
-								| !{translate('email_or_password_wrong_try_again_or_reset', {}, [{ name: 'a', attrs: { href: '/user/password/reset', 'aria-describedby': 'resetPasswordDescription' } }])}
-								span.sr-only(id='resetPasswordDescription')
-									| #{translate('reset_password_link')}
-							+customValidationMessage('password-compromised')
-								| !{translate('password_compromised_try_again_or_use_known_device_or_reset', {}, [{name: 'a', attrs: {href: 'https://haveibeenpwned.com/passwords', rel: 'noopener noreferrer', target: '_blank'}}, {name: 'a', attrs: {href: '/user/password/reset', target: '_blank'}}])}.
-							.form-group
-								input.form-control(
-									type='email',
-									name='email',
-									required,
-									placeholder='email@example.com',
-									autofocus="true"
-								)
-							.form-group
-								input.form-control(
-									type='password',
-									name='password',
-									required,
-									placeholder='********',
-								)
-							.actions
-								button.btn-primary.btn(
-									type='submit',
-									data-ol-disabled-inflight
-								)
-									span(data-ol-inflight="idle") #{translate("login")}
-									span(hidden data-ol-inflight="pending") #{translate("logging_in")}…
-								a.pull-right(href='/user/password/reset') #{translate("forgot_your_password")}?
-							if login_support_text
-								hr
-								p.text-center !{login_support_text}	
-	
+  main.content.content-alt#main-content
+    | <style>
+    |   .tab {
+    |     overflow: hidden;
+    |     border: 1px solid #ccc;
+    |     background-color: #f1f1f1;
+    |     display: flex;
+    |     align-items: center;
+    |     justify-content: center;
+    |   }
+    |   .tab button {
+    |     background-color: inherit;
+    |     float: left;
+    |     border: none;
+    |     outline: none;
+    |     cursor: pointer;
+    |     padding: 14px 16px;
+    |     transition: 0.3s;
+    |     margin: 0 1rem;
+    |   }
+    |   .tab button:hover {
+    |     background-color: #ddd;
+    |   }
+    |   .tab button.active {
+    |     background-color: #ccc;
+    |   }
+    |   .tabcontent {
+    |     display: none;
+    |     padding: 1rem;
+    |     border: 1px solid #ccc;
+    |     border-top: none;
+    |   }
+    |   #oidc {
+    |     display: block;
+    |   }
+    | </style>
+    .container
+      .row
+        .col-md-6.col-md-offset-3.col-lg-4.col-lg-offset-4
+          .card
+            .page-header
+              h1 #{translate("log_in")}
+              <div class="tab">
+                <button class="tablinks" id='oidc-tab'>DInf/C3SL Login</button>
+                <button class="tablinks" id='overleaf-tab'>Overleaf Login</button>
+              </div>
+              <div id="oidc" class="tabcontent">
+                a.btn-primary.btn.btn-block(href="/oidc/login")
+                  span(data-ol-inflight="idle") DInf/C3SL Login
+                  span(hidden data-ol-inflight="pending") #{translate("logging_in")}…
+              </div>
+              script(type="text/javascript", nonce=scriptNonce)
+                | function openTab(evt, tab) {
+                |   let tabcontent = document.getElementsByClassName("tabcontent");
+                |   for (let i = 0; i < tabcontent.length; i++)
+                |     tabcontent[i].style.display = "none";
+                |   let tablinks = document.getElementsByClassName("tablinks");
+                |   for (let i = 0; i < tablinks.length; i++)
+                |     tablinks[i].className = tablinks[i].className.replace(" active", "");
+                |   document.getElementById(tab).style.display = "block";
+                |   evt.currentTarget.className += " active";
+                | }
+                | document.getElementById('oidc-tab').addEventListener('click', function(event) {
+                |     openTab(event, 'oidc');
+                | });
+                | document.getElementById('overleaf-tab').addEventListener('click', function(event) {
+                |     openTab(event, 'overleaf');
+                | });
+
+              <div id="overleaf" class="tabcontent">
+                form(data-ol-async-form, name="loginForm", action='/login', method="POST")
+                  input(name='_csrf', type='hidden', value=csrfToken)
+                  +formMessages()
+                  +customFormMessage('invalid-password-retry-or-reset', 'danger')
+                    | !{translate('email_or_password_wrong_try_again_or_reset', {}, [{ name: 'a', attrs: { href: '/user/password/reset', 'aria-describedby': 'resetPasswordDescription' } }])}
+                    span.sr-only(id='resetPasswordDescription')
+                      | #{translate('reset_password_link')}
+                  +customValidationMessage('password-compromised')
+                    | !{translate('password_compromised_try_again_or_use_known_device_or_reset', {}, [{name: 'a', attrs: {href: 'https://haveibeenpwned.com/passwords', rel: 'noopener noreferrer', target: '_blank'}}, {name: 'a', attrs: {href: '/user/password/reset', target: '_blank'}}])}.
+                  .form-group
+                    input.form-control(
+                      type='email',
+                      name='email',
+                      required,
+                      placeholder='example@inf.ufpr.br',
+                      autofocus="true"
+                    )
+                  .form-group
+                    input.form-control(
+                      type='password',
+                      name='password',
+                      required,
+                      placeholder='********',
+                    )
+                  .actions
+                    button.btn-primary.btn(
+                      type='submit',
+                      data-ol-disabled-inflight
+                    )
+                      span(data-ol-inflight="idle") #{translate("login")}
+                      span(hidden data-ol-inflight="pending") #{translate("logging_in")}…
+                    a.pull-right(href='/user/password/reset') #{translate("forgot_your_password")}?
+              </div>
