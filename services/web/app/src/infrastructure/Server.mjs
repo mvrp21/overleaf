@@ -223,8 +223,10 @@ passport.use(
     AuthenticationController.doPassportLogin
   )
 )
+
+import crypto from 'crypto';
+
 if (process.env['OPENID_ENABLED'] === 'true') {
-  const crypto = require('crypto');
   // had to rush to make this fork, so externally managed users will get a random password
   async function genPass(length) {
       return new Promise((res, rej) => {
@@ -247,13 +249,12 @@ if (process.env['OPENID_ENABLED'] === 'true') {
       callbackURL: '/oidc/redirect',
       scope: [ 'profile' ]
     },
-    async function verify(issuer, profile, cb) {
-      // TODO: proper profile to userDetails mapper configuration
+    async function verify(_issuer, profile, cb) {
       const names = profile.displayName.split(' ');
       const mid = (names.length + 1) / 2;
       const userDetails = {
         id: profile.id,
-        email: profile.username + "@inf.ufpr.br",
+        email: profile.email,
         first_name: names.slice(0, mid).join(' '),
         last_name: names.slice(mid).join(' '),
         password: await genPass(64)
