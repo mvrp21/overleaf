@@ -47,10 +47,9 @@ When a user logs in via OpenID Connect, two things may happen:
 1. If the user does not exist in the Overleaf DB it is created with a random password.
 2. If the user exists, the login continues as it normally would.
 
-> [!question]
-> > Does that mean that if I reset my password after creating a user with the OpenID login I can log in with both methods?
->
-> Yes.
+> Does that mean that if I reset my password after creating a user with the OpenID login I can log in with both methods?
+
+Yes.
 
 ### Using OpenID Connect
 
