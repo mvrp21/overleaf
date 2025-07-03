@@ -3,6 +3,7 @@ const { callbackify } = require('util')
 const { callbackifyMultiResult } = require('@overleaf/promise-utils')
 const PlansLocator = require('./PlansLocator')
 const SubscriptionLocator = require('./SubscriptionLocator')
+const SubscriptionHelper = require('./SubscriptionHelper')
 const UserFeaturesUpdater = require('./UserFeaturesUpdater')
 const FeaturesHelper = require('./FeaturesHelper')
 const Settings = require('@overleaf/settings')
@@ -14,7 +15,7 @@ const UserGetter = require('../User/UserGetter')
 const AnalyticsManager = require('../Analytics/AnalyticsManager')
 const Queues = require('../../infrastructure/Queues')
 const Modules = require('../../infrastructure/Modules')
-const { AI_ADD_ON_CODE } = require('./RecurlyEntities')
+const { AI_ADD_ON_CODE } = require('./PaymentProviderEntities')
 
 /**
  * Enqueue a job for refreshing features for the given user
@@ -117,7 +118,10 @@ async function computeFeatures(userId) {
 async function _getIndividualFeatures(userId) {
   const subscription =
     await SubscriptionLocator.promises.getUsersSubscription(userId)
-  if (subscription == null || subscription?.recurlyStatus?.state === 'paused') {
+  if (
+    subscription == null ||
+    SubscriptionHelper.getPaidSubscriptionState(subscription) === 'paused'
+  ) {
     return {}
   }
 

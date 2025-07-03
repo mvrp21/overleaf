@@ -1,5 +1,4 @@
 import { User } from '../../../../../../types/group-management/user'
-import Icon from '@/shared/components/icon'
 import { useState } from 'react'
 import useAsync from '@/shared/hooks/use-async'
 import { useTranslation } from 'react-i18next'
@@ -18,6 +17,7 @@ import OLNotification from '@/features/ui/components/ol/ol-notification'
 import OLFormControl from '@/features/ui/components/ol/ol-form-control'
 import OLFormLabel from '@/features/ui/components/ol/ol-form-label'
 import OLFormSelect from '@/features/ui/components/ol/ol-form-select'
+import { sendMB } from '@/infrastructure/event-tracking'
 
 type OffboardManagedUserModalProps = {
   user: User
@@ -49,8 +49,9 @@ export default function OffboardManagedUserModal({
   const shouldEnableDeleteUserButton =
     suppliedEmail === user.email && !!selectedRecipientId
 
-  const handleDeleteUserSubmit = (event: any) => {
+  const handleDeleteUserSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    sendMB('delete-managed-user-confirmed')
     runAsync(
       postJSON(`/manage/groups/${groupId}/offboardManagedUser/${user._id}`, {
         body: {
@@ -102,7 +103,6 @@ export default function OffboardManagedUserModal({
             <OLFormSelect
               aria-label={t('select_user')}
               required
-              placeholder={t('choose_from_group_members')}
               value={selectedRecipientId || ''}
               onChange={e => setSelectedRecipientId(e.target.value)}
             >
@@ -143,16 +143,8 @@ export default function OffboardManagedUserModal({
             type="submit"
             variant="danger"
             disabled={isLoading || isSuccess || !shouldEnableDeleteUserButton}
+            loadingLabel={t('deleting')}
             isLoading={isLoading}
-            bs3Props={{
-              loading: isLoading ? (
-                <>
-                  <Icon type="refresh" fw spin /> {t('deleting')}…
-                </>
-              ) : (
-                t('delete_user')
-              ),
-            }}
           >
             {t('delete_user')}
           </OLButton>

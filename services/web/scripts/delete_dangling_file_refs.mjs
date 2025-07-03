@@ -10,6 +10,7 @@ import Errors from '../app/src/Features/Errors/Errors.js'
 import FileStoreHandler from '../app/src/Features/FileStore/FileStoreHandler.js'
 import ProjectEntityMongoUpdateHandler from '../app/src/Features/Project/ProjectEntityMongoUpdateHandler.js'
 import { iterablePaths } from '../app/src/Features/Project/IterablePath.js'
+import { scriptRunner } from './lib/ScriptRunner.mjs'
 
 const { ObjectId } = mongodb
 
@@ -104,7 +105,8 @@ async function deleteDoc(projectId, docId) {
     await ProjectEntityMongoUpdateHandler.promises.deleteEntity(
       projectId,
       docId,
-      'doc'
+      'doc',
+      null // unset lastUpdatedBy
     )
   }
 }
@@ -115,13 +117,14 @@ async function deleteFile(projectId, fileId) {
     await ProjectEntityMongoUpdateHandler.promises.deleteEntity(
       projectId,
       fileId,
-      'file'
+      'file',
+      null // unset lastUpdatedBy
     )
   }
 }
 
 try {
-  await main()
+  await scriptRunner(main)
   process.exit(0)
 } catch (error) {
   console.error({ error })

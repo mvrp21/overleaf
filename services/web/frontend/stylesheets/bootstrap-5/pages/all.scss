@@ -36,6 +36,8 @@
 @import 'editor/table-generator-column-width-modal';
 @import 'editor/math-preview';
 @import 'editor/references-search';
+@import 'editor/editor-survey';
+@import 'error-pages';
 @import 'website-redesign';
 @import 'group-settings';
 @import 'templates-v2';
@@ -44,9 +46,12 @@
 @import 'login-register';
 @import 'login';
 @import 'register';
+@import 'plans';
 @import 'onboarding-confirm-email';
 @import 'secondary-confirm-email';
 @import 'onboarding';
 @import 'admin/admin';
 @import 'admin/project-url-lookup';
 @import 'add-secondary-email-prompt';
+@import 'try-premium';
+@import 'bonus';

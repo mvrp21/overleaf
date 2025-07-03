@@ -2,7 +2,7 @@
 // Migrated from services/web/frontend/js/ide/editor/ShareJsDoc.js
 
 import EventEmitter from '../../../utils/EventEmitter'
-import { Doc } from '@/vendor/libs/sharejs'
+import sharejs, { Doc } from '@/vendor/libs/sharejs'
 import { Socket } from '@/features/ide-react/connection/types/socket'
 import { debugConsole } from '@/utils/debugging'
 import { decodeUtf8 } from '@/utils/decode-utf8'
@@ -17,6 +17,16 @@ import {
 import { EditorFacade } from '@/features/source-editor/extensions/realtime'
 import { recordDocumentFirstChangeEvent } from '@/features/event-tracking/document-first-change-event'
 import getMeta from '@/utils/meta'
+import { historyOTType } from './share-js-history-ot-type'
+import {
+  StringFileData,
+  TrackedChangeList,
+  EditOperationBuilder,
+} from 'overleaf-editor-core'
+import {
+  StringFileRawData,
+  RawEditOperation,
+} from 'overleaf-editor-core/lib/types'
 
 // All times below are in milliseconds
 const SINGLE_USER_FLUSH_DELAY = 2000
@@ -27,6 +37,7 @@ const FATAL_OP_TIMEOUT = 45000
 const RECENT_ACK_LIMIT = 2 * SINGLE_USER_FLUSH_DELAY
 
 type Update = Record<string, any>
+export type OTType = 'sharejs-text-ot' | 'history-ot'
 
 type Connection = {
   send: (update: Update) => void
@@ -35,7 +46,6 @@ type Connection = {
 }
 
 export class ShareJsDoc extends EventEmitter {
-  type: string
   track_changes = false
   track_changes_id_seeds: TrackChangesIdSeeds | null = null
   connection: Connection
@@ -57,12 +67,22 @@ export class ShareJsDoc extends EventEmitter {
     version: number,
     readonly socket: Socket,
     private readonly globalEditorWatchdogManager: EditorWatchdogManager,
-    private readonly eventEmitter: IdeEventEmitter
+    private readonly eventEmitter: IdeEventEmitter,
+    readonly type: OTType = 'sharejs-text-ot'
   ) {
     super()
-    this.type = 'text'
+    let sharejsType
     // Decode any binary bits of data
-    const snapshot = docLines.map(line => decodeUtf8(line)).join('\n')
+    let snapshot: string | StringFileData
+    if (this.type === 'history-ot') {
+      snapshot = StringFileData.fromRaw(
+        docLines as unknown as StringFileRawData
+      )
+      sharejsType = historyOTType
+    } else {
+      snapshot = docLines.map(line => decodeUtf8(line)).join('\n')
+      sharejsType = sharejs.types.text
+    }
 
     this.connection = {
       send: (update: Update) => {
@@ -89,11 +109,12 @@ export class ShareJsDoc extends EventEmitter {
     }
 
     this._doc = new Doc(this.connection, this.doc_id, {
-      type: this.type,
+      type: sharejsType,
     })
     this._doc.setFlushDelay(SINGLE_USER_FLUSH_DELAY)
     this._doc.on('change', (...args: any[]) => {
-      if (!this.pendingOpCreatedAt) {
+      const isRemote = args[3]
+      if (!isRemote && !this.pendingOpCreatedAt) {
         debugConsole.log('set pendingOpCreatedAt', new Date())
         this.pendingOpCreatedAt = performance.now()
       }
@@ -139,13 +160,22 @@ export class ShareJsDoc extends EventEmitter {
     this.removeCarriageReturnCharFromShareJsDoc()
   }
 
+  setTrackChangesUserId(userId: string | null) {
+    this.track_changes = userId != null
+  }
+
+  getTrackedChanges() {
+    if (this._doc.otType === 'history-ot') {
+      return this._doc.snapshot.getTrackedChanges() as TrackedChangeList
+    } else {
+      return null
+    }
+  }
+
   private removeCarriageReturnCharFromShareJsDoc() {
     const doc = this._doc
-    if (doc.snapshot.indexOf('\r') === -1) {
-      return
-    }
     let nextPos
-    while ((nextPos = doc.snapshot.indexOf('\r')) !== -1) {
+    while ((nextPos = doc.getText().indexOf('\r')) !== -1) {
       debugConsole.log('[ShareJsDoc] remove-carriage-return-char', nextPos)
       doc.del(nextPos, 1)
     }
@@ -236,7 +266,15 @@ export class ShareJsDoc extends EventEmitter {
   // issues are resolved.
   processUpdateFromServer(message: Message) {
     try {
-      this._doc._onMessage(message)
+      if (this.type === 'history-ot' && message.op != null) {
+        const ops = message.op as RawEditOperation[]
+        this._doc._onMessage({
+          ...message,
+          op: ops.map(EditOperationBuilder.fromJSON),
+        })
+      } else {
+        this._doc._onMessage(message)
+      }
     } catch (error) {
       // Version mismatches are thrown as errors
       debugConsole.log(error)
@@ -258,7 +296,7 @@ export class ShareJsDoc extends EventEmitter {
   }
 
   getSnapshot() {
-    return this._doc.snapshot as string | undefined
+    return this._doc.getText() as string
   }
 
   getVersion() {

@@ -1,5 +1,5 @@
 import { forwardRef } from 'react'
-import { Button as BS5Button, Spinner } from 'react-bootstrap-5'
+import { Button as BS5Button, Spinner } from 'react-bootstrap'
 import type { ButtonProps } from '@/features/ui/components/types/button-props'
 import classNames from 'classnames'
 import { useTranslation } from 'react-i18next'
@@ -52,6 +52,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={isLoading || props.disabled}
         data-ol-loading={isLoading}
+        role={undefined}
       >
         {isLoading && (
           <span className="spinner-container">

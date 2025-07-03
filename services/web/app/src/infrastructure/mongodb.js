@@ -33,7 +33,6 @@ addConnectionDrainer('mongodb', async () => {
 const internalDb = mongoClient.db()
 const db = {
   contacts: internalDb.collection('contacts'),
-  deletedFiles: internalDb.collection('deletedFiles'),
   deletedProjects: internalDb.collection('deletedProjects'),
   deletedSubscriptions: internalDb.collection('deletedSubscriptions'),
   deletedUsers: internalDb.collection('deletedUsers'),
@@ -49,6 +48,7 @@ const db = {
   githubSyncUserCredentials: internalDb.collection('githubSyncUserCredentials'),
   globalMetrics: internalDb.collection('globalMetrics'),
   grouppolicies: internalDb.collection('grouppolicies'),
+  groupAuditLogEntries: internalDb.collection('groupAuditLogEntries'),
   institutions: internalDb.collection('institutions'),
   messages: internalDb.collection('messages'),
   migrations: internalDb.collection('migrations'),
@@ -61,7 +61,6 @@ const db = {
   projectHistoryFailures: internalDb.collection('projectHistoryFailures'),
   projectHistoryGlobalBlobs: internalDb.collection('projectHistoryGlobalBlobs'),
   projectHistoryLabels: internalDb.collection('projectHistoryLabels'),
-  projectHistoryMetaData: internalDb.collection('projectHistoryMetaData'),
   projectHistorySyncState: internalDb.collection('projectHistorySyncState'),
   projectInvites: internalDb.collection('projectInvites'),
   projects: internalDb.collection('projects'),
@@ -81,6 +80,7 @@ const db = {
   userAuditLogEntries: internalDb.collection('userAuditLogEntries'),
   users: internalDb.collection('users'),
   onboardingDataCollection: internalDb.collection('onboardingDataCollection'),
+  scriptLogs: internalDb.collection('scriptLogs'),
 }
 
 const connectionPromise = mongoClient.connect()
@@ -129,10 +129,15 @@ async function getCollectionInternal(name) {
   return internalDb.collection(name)
 }
 
+async function waitForDb() {
+  await connectionPromise
+}
+
 module.exports = {
   db,
   ObjectId,
   connectionPromise,
+  waitForDb,
   getCollectionNames,
   getCollectionInternal,
   cleanupTestDatabase,

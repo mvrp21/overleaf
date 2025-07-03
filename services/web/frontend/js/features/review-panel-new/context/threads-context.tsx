@@ -20,7 +20,7 @@ import { UserId } from '../../../../../types/user'
 import { deleteJSON, getJSON, postJSON } from '@/infrastructure/fetch-json'
 import RangesTracker from '@overleaf/ranges-tracker'
 import { CommentOperation } from '../../../../../types/change'
-import { useEditorManagerContext } from '@/features/ide-react/context/editor-manager-context'
+import { useEditorOpenDocContext } from '@/features/ide-react/context/editor-open-doc-context'
 import { useEditorContext } from '@/shared/context/editor-context'
 import { debugConsole } from '@/utils/debugging'
 import { captureException } from '@/infrastructure/error-reporter'
@@ -48,9 +48,9 @@ const ThreadsActionsContext = createContext<ThreadsActions | undefined>(
   undefined
 )
 
-export const ThreadsProvider: FC = ({ children }) => {
+export const ThreadsProvider: FC<React.PropsWithChildren> = ({ children }) => {
   const { _id: projectId } = useProjectContext()
-  const { currentDocument } = useEditorManagerContext()
+  const { currentDocument } = useEditorOpenDocContext()
   const { isRestrictedTokenMember } = useEditorContext()
 
   // const [error, setError] = useState<Error>()
@@ -89,7 +89,7 @@ export const ThreadsProvider: FC = ({ children }) => {
       ) => {
         setData(value => {
           if (value) {
-            const { submitting, ...thread } = value[threadId] ?? {
+            const { submitting: _submitting, ...thread } = value[threadId] ?? {
               messages: [],
             }
 
@@ -225,7 +225,7 @@ export const ThreadsProvider: FC = ({ children }) => {
   useSocketListener(
     socket,
     'new-comment-threads',
-    useCallback(threads => {
+    useCallback((threads: any) => {
       setData(prevState => {
         const newThreads = { ...prevState }
         for (const threadId of Object.keys(threads)) {

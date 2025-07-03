@@ -24,16 +24,6 @@ describe('CollaboratorsHandler', function () {
       name: 'Foo',
     }
 
-    this.archivedProject = {
-      _id: new ObjectId(),
-      archived: [new ObjectId(this.userId)],
-    }
-
-    this.oldArchivedProject = {
-      _id: new ObjectId(),
-      archived: true,
-    }
-
     this.UserGetter = {
       promises: {
         getUser: sinon.stub().resolves(null),
@@ -59,9 +49,6 @@ describe('CollaboratorsHandler', function () {
       },
     }
 
-    this.ProjectHelper = {
-      calculateArchivedArray: sinon.stub(),
-    }
     this.CollaboratorsGetter = {
       promises: {
         dangerouslyGetAllProjectsUserIsMemberOf: sinon.stub(),
@@ -77,7 +64,6 @@ describe('CollaboratorsHandler', function () {
         '../ThirdPartyDataStore/TpdsProjectFlusher': this.TpdsProjectFlusher,
         '../ThirdPartyDataStore/TpdsUpdateSender': this.TpdsUpdateSender,
         '../Project/ProjectGetter': this.ProjectGetter,
-        '../Project/ProjectHelper': this.ProjectHelper,
         '../Editor/EditorRealTimeController': this.EditorRealTimeController,
         './CollaboratorsGetter': this.CollaboratorsGetter,
       },
@@ -90,15 +76,6 @@ describe('CollaboratorsHandler', function () {
 
   describe('removeUserFromProject', function () {
     describe('a non-archived project', function () {
-      beforeEach(function () {
-        this.ProjectMock.expects('findOne')
-          .withArgs({
-            _id: this.project._id,
-          })
-          .chain('exec')
-          .resolves(this.project)
-      })
-
       it('should remove the user from mongo', async function () {
         this.ProjectMock.expects('updateOne')
           .withArgs(
@@ -111,6 +88,7 @@ describe('CollaboratorsHandler', function () {
                 reviewer_refs: this.userId,
                 readOnly_refs: this.userId,
                 pendingEditor_refs: this.userId,
+                pendingReviewer_refs: this.userId,
                 tokenAccessReadOnly_refs: this.userId,
                 tokenAccessReadAndWrite_refs: this.userId,
                 archived: this.userId,
@@ -122,85 +100,6 @@ describe('CollaboratorsHandler', function () {
           .resolves()
         await this.CollaboratorsHandler.promises.removeUserFromProject(
           this.project._id,
-          this.userId
-        )
-      })
-    })
-
-    describe('an archived project, archived with a boolean value', function () {
-      beforeEach(function () {
-        const archived = [new ObjectId(this.userId)]
-        this.ProjectHelper.calculateArchivedArray.returns(archived)
-
-        this.ProjectMock.expects('findOne')
-          .withArgs({
-            _id: this.oldArchivedProject._id,
-          })
-          .chain('exec')
-          .resolves(this.oldArchivedProject)
-      })
-
-      it('should remove the user from mongo', async function () {
-        this.ProjectMock.expects('updateOne')
-          .withArgs(
-            {
-              _id: this.oldArchivedProject._id,
-            },
-            {
-              $set: {
-                archived: [],
-              },
-              $pull: {
-                collaberator_refs: this.userId,
-                reviewer_refs: this.userId,
-                readOnly_refs: this.userId,
-                pendingEditor_refs: this.userId,
-                tokenAccessReadOnly_refs: this.userId,
-                tokenAccessReadAndWrite_refs: this.userId,
-                trashed: this.userId,
-              },
-            }
-          )
-          .resolves()
-        await this.CollaboratorsHandler.promises.removeUserFromProject(
-          this.oldArchivedProject._id,
-          this.userId
-        )
-      })
-    })
-
-    describe('an archived project, archived with an array value', function () {
-      beforeEach(function () {
-        this.ProjectMock.expects('findOne')
-          .withArgs({
-            _id: this.archivedProject._id,
-          })
-          .chain('exec')
-          .resolves(this.archivedProject)
-      })
-
-      it('should remove the user from mongo', async function () {
-        this.ProjectMock.expects('updateOne')
-          .withArgs(
-            {
-              _id: this.archivedProject._id,
-            },
-            {
-              $pull: {
-                collaberator_refs: this.userId,
-                reviewer_refs: this.userId,
-                readOnly_refs: this.userId,
-                pendingEditor_refs: this.userId,
-                tokenAccessReadOnly_refs: this.userId,
-                tokenAccessReadAndWrite_refs: this.userId,
-                archived: this.userId,
-                trashed: this.userId,
-              },
-            }
-          )
-          .resolves()
-        await this.CollaboratorsHandler.promises.removeUserFromProject(
-          this.archivedProject._id,
           this.userId
         )
       })
@@ -275,6 +174,32 @@ describe('CollaboratorsHandler', function () {
             this.userId,
             'readOnly',
             { pendingEditor: true }
+          )
+        })
+      })
+
+      describe('with pendingReviewer flag', function () {
+        it('should add them to the pending reviewer refs', async function () {
+          this.ProjectMock.expects('updateOne')
+            .withArgs(
+              {
+                _id: this.project._id,
+              },
+              {
+                $addToSet: {
+                  readOnly_refs: this.userId,
+                  pendingReviewer_refs: this.userId,
+                },
+              }
+            )
+            .chain('exec')
+            .resolves()
+          await this.CollaboratorsHandler.promises.addUserIdToProject(
+            this.project._id,
+            this.addingUserId,
+            this.userId,
+            'readOnly',
+            { pendingReviewer: true }
           )
         })
       })
@@ -375,6 +300,40 @@ describe('CollaboratorsHandler', function () {
       })
     })
 
+    describe('when user already exists as a reviewer', function () {
+      beforeEach(function () {
+        this.project.collaberator_refs = []
+        this.project.reviewer_refs = [this.userId]
+        this.project.readOnly_refs = []
+      })
+
+      it('should not add the user again', async function () {
+        await this.CollaboratorsHandler.promises.addUserIdToProject(
+          this.project._id,
+          this.addingUserId,
+          this.userId,
+          'readAndWrite'
+        )
+      })
+    })
+
+    describe('when user already exists as a read-only user', function () {
+      beforeEach(function () {
+        this.project.collaberator_refs = []
+        this.project.reviewer_refs = []
+        this.project.readOnly_refs = [this.userId]
+      })
+
+      it('should not add the user again', async function () {
+        await this.CollaboratorsHandler.promises.addUserIdToProject(
+          this.project._id,
+          this.addingUserId,
+          this.userId,
+          'readAndWrite'
+        )
+      })
+    })
+
     describe('with null addingUserId', function () {
       beforeEach(async function () {
         this.project.collaberator_refs = []
@@ -433,13 +392,6 @@ describe('CollaboratorsHandler', function () {
         'token-read-only-1',
       ]
       for (const projectId of expectedProjects) {
-        this.ProjectMock.expects('findOne')
-          .withArgs({
-            _id: projectId,
-          })
-          .chain('exec')
-          .resolves({ _id: projectId })
-
         this.ProjectMock.expects('updateOne')
           .withArgs(
             {
@@ -451,6 +403,7 @@ describe('CollaboratorsHandler', function () {
                 reviewer_refs: this.userId,
                 readOnly_refs: this.userId,
                 pendingEditor_refs: this.userId,
+                pendingReviewer_refs: this.userId,
                 tokenAccessReadOnly_refs: this.userId,
                 tokenAccessReadAndWrite_refs: this.userId,
                 archived: this.userId,
@@ -549,6 +502,24 @@ describe('CollaboratorsHandler', function () {
         )
         .chain('exec')
         .resolves()
+      this.ProjectMock.expects('updateMany')
+        .withArgs(
+          { pendingReviewer_refs: this.fromUserId },
+          {
+            $addToSet: { pendingReviewer_refs: this.toUserId },
+          }
+        )
+        .chain('exec')
+        .resolves()
+      this.ProjectMock.expects('updateMany')
+        .withArgs(
+          { pendingReviewer_refs: this.fromUserId },
+          {
+            $pull: { pendingReviewer_refs: this.fromUserId },
+          }
+        )
+        .chain('exec')
+        .resolves()
     })
 
     describe('successfully', function () {
@@ -586,7 +557,7 @@ describe('CollaboratorsHandler', function () {
       this.ProjectMock.expects('updateOne')
         .withArgs(
           {
-            _id: this.projectId,
+            _id: this.project._id,
             $or: [
               { collaberator_refs: this.userId },
               { readOnly_refs: this.userId },
@@ -597,6 +568,7 @@ describe('CollaboratorsHandler', function () {
             $pull: {
               collaberator_refs: this.userId,
               pendingEditor_refs: this.userId,
+              pendingReviewer_refs: this.userId,
               reviewer_refs: this.userId,
             },
             $addToSet: { readOnly_refs: this.userId },
@@ -605,7 +577,7 @@ describe('CollaboratorsHandler', function () {
         .chain('exec')
         .resolves({ matchedCount: 1 })
       await this.CollaboratorsHandler.promises.setCollaboratorPrivilegeLevel(
-        this.projectId,
+        this.project._id,
         this.userId,
         'readOnly'
       )
@@ -615,7 +587,7 @@ describe('CollaboratorsHandler', function () {
       this.ProjectMock.expects('updateOne')
         .withArgs(
           {
-            _id: this.projectId,
+            _id: this.project._id,
             $or: [
               { collaberator_refs: this.userId },
               { readOnly_refs: this.userId },
@@ -628,13 +600,14 @@ describe('CollaboratorsHandler', function () {
               readOnly_refs: this.userId,
               reviewer_refs: this.userId,
               pendingEditor_refs: this.userId,
+              pendingReviewer_refs: this.userId,
             },
           }
         )
         .chain('exec')
         .resolves({ matchedCount: 1 })
       await this.CollaboratorsHandler.promises.setCollaboratorPrivilegeLevel(
-        this.projectId,
+        this.project._id,
         this.userId,
         'readAndWrite'
       )
@@ -653,7 +626,7 @@ describe('CollaboratorsHandler', function () {
         this.ProjectMock.expects('updateOne')
           .withArgs(
             {
-              _id: this.projectId,
+              _id: this.project._id,
               $or: [
                 { collaberator_refs: this.userId },
                 { readOnly_refs: this.userId },
@@ -667,13 +640,14 @@ describe('CollaboratorsHandler', function () {
                 readOnly_refs: this.userId,
                 collaberator_refs: this.userId,
                 pendingEditor_refs: this.userId,
+                pendingReviewer_refs: this.userId,
               },
             }
           )
           .chain('exec')
           .resolves({ matchedCount: 1 })
         await this.CollaboratorsHandler.promises.setCollaboratorPrivilegeLevel(
-          this.projectId,
+          this.project._id,
           this.userId,
           'review'
         )
@@ -695,7 +669,7 @@ describe('CollaboratorsHandler', function () {
         this.ProjectMock.expects('updateOne')
           .withArgs(
             {
-              _id: this.projectId,
+              _id: this.project._id,
               $or: [
                 { collaberator_refs: this.userId },
                 { readOnly_refs: this.userId },
@@ -709,13 +683,14 @@ describe('CollaboratorsHandler', function () {
                 readOnly_refs: this.userId,
                 collaberator_refs: this.userId,
                 pendingEditor_refs: this.userId,
+                pendingReviewer_refs: this.userId,
               },
             }
           )
           .chain('exec')
           .resolves({ matchedCount: 1 })
         await this.CollaboratorsHandler.promises.setCollaboratorPrivilegeLevel(
-          this.projectId,
+          this.project._id,
           this.userId,
           'review'
         )
@@ -726,7 +701,7 @@ describe('CollaboratorsHandler', function () {
       this.ProjectMock.expects('updateOne')
         .withArgs(
           {
-            _id: this.projectId,
+            _id: this.project._id,
             $or: [
               { collaberator_refs: this.userId },
               { readOnly_refs: this.userId },
@@ -741,16 +716,50 @@ describe('CollaboratorsHandler', function () {
             $pull: {
               collaberator_refs: this.userId,
               reviewer_refs: this.userId,
+              pendingReviewer_refs: this.userId,
             },
           }
         )
         .chain('exec')
         .resolves({ matchedCount: 1 })
       await this.CollaboratorsHandler.promises.setCollaboratorPrivilegeLevel(
-        this.projectId,
+        this.project._id,
         this.userId,
         'readOnly',
         { pendingEditor: true }
+      )
+    })
+
+    it('sets a collaborator to read-only as a pendingReviewer', async function () {
+      this.ProjectMock.expects('updateOne')
+        .withArgs(
+          {
+            _id: this.project._id,
+            $or: [
+              { collaberator_refs: this.userId },
+              { readOnly_refs: this.userId },
+              { reviewer_refs: this.userId },
+            ],
+          },
+          {
+            $addToSet: {
+              readOnly_refs: this.userId,
+              pendingReviewer_refs: this.userId,
+            },
+            $pull: {
+              collaberator_refs: this.userId,
+              reviewer_refs: this.userId,
+              pendingEditor_refs: this.userId,
+            },
+          }
+        )
+        .chain('exec')
+        .resolves({ matchedCount: 1 })
+      await this.CollaboratorsHandler.promises.setCollaboratorPrivilegeLevel(
+        this.project._id,
+        this.userId,
+        'readOnly',
+        { pendingReviewer: true }
       )
     })
 
@@ -760,7 +769,7 @@ describe('CollaboratorsHandler', function () {
         .resolves({ matchedCount: 0 })
       await expect(
         this.CollaboratorsHandler.promises.setCollaboratorPrivilegeLevel(
-          this.projectId,
+          this.project._id,
           this.userId,
           'readAndWrite'
         )

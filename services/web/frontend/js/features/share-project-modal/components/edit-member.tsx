@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import PropTypes from 'prop-types'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { useShareProjectContext } from './share-project-modal'
 import TransferOwnershipModal from './transfer-ownership-modal'
 import { removeMemberFromProject, updateMember } from '../utils/api'
@@ -14,9 +13,8 @@ import OLButton from '@/features/ui/components/ol/ol-button'
 import OLFormGroup from '@/features/ui/components/ol/ol-form-group'
 import OLCol from '@/features/ui/components/ol/ol-col'
 import MaterialIcon from '@/shared/components/material-icon'
-import getMeta from '@/utils/meta'
 import { useUserContext } from '@/shared/context/user-context'
-import { isSplitTestEnabled } from '@/utils/splitTestUtils'
+import { upgradePlan } from '@/main/account-upgrade'
 
 type PermissionsOption = PermissionsLevel | 'removeAccess' | 'downgraded'
 
@@ -25,6 +23,7 @@ type EditMemberProps = {
   hasExceededCollaboratorLimit: boolean
   hasBeenDowngraded: boolean
   canAddCollaborators: boolean
+  isReviewerOnFreeProject?: boolean
 }
 
 type Privilege = {
@@ -37,6 +36,7 @@ export default function EditMember({
   hasExceededCollaboratorLimit,
   hasBeenDowngraded,
   canAddCollaborators,
+  isReviewerOnFreeProject,
 }: EditMemberProps) {
   const [privileges, setPrivileges] = useState<PermissionsOption>(
     member.privileges
@@ -73,7 +73,10 @@ export default function EditMember({
   }
 
   function shouldWarnMember() {
-    return hasExceededCollaboratorLimit && privileges === 'readAndWrite'
+    return (
+      hasExceededCollaboratorLimit &&
+      ['readAndWrite', 'review'].includes(privileges)
+    )
   }
 
   function commitPrivilegeChange(newPrivileges: PermissionsOption) {
@@ -141,16 +144,20 @@ export default function EditMember({
       }}
     >
       <OLFormGroup className="project-member row">
-        <OLCol xs={7}>
+        <OLCol xs={8}>
           <div className="project-member-email-icon">
             <MaterialIcon
               type={
-                shouldWarnMember() || member.pendingEditor
+                shouldWarnMember() ||
+                member.pendingEditor ||
+                member.pendingReviewer
                   ? 'warning'
                   : 'person'
               }
               className={
-                shouldWarnMember() || member.pendingEditor
+                shouldWarnMember() ||
+                member.pendingEditor ||
+                member.pendingReviewer
                   ? 'project-member-warning'
                   : undefined
               }
@@ -160,6 +167,11 @@ export default function EditMember({
               {member.pendingEditor && (
                 <div className="subtitle">{t('view_only_downgraded')}</div>
               )}
+              {member.pendingReviewer && (
+                <div className="subtitle">
+                  {t('view_only_reviewer_downgraded')}
+                </div>
+              )}
               {shouldWarnMember() && (
                 <div className="subtitle">
                   {t('will_lose_edit_access_on_date', {
@@ -167,11 +179,26 @@ export default function EditMember({
                   })}
                 </div>
               )}
+              {isReviewerOnFreeProject && (
+                <div className="small">
+                  <Trans
+                    i18nKey="comment_only_upgrade_to_enable_track_changes"
+                    components={[
+                      // eslint-disable-next-line react/jsx-key
+                      <OLButton
+                        variant="link"
+                        className="btn-inline-link"
+                        onClick={() => upgradePlan('track-changes')}
+                      />,
+                    ]}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </OLCol>
 
-        <OLCol xs={5} className="project-member-actions">
+        <OLCol xs={4} className="project-member-actions">
           {confirmRemoval && (
             <ChangePrivilegesActions
               handleReset={() => setPrivileges(member.privileges)}
@@ -199,15 +226,6 @@ export default function EditMember({
     </form>
   )
 }
-EditMember.propTypes = {
-  member: PropTypes.shape({
-    _id: PropTypes.string.isRequired,
-    email: PropTypes.string.isRequired,
-    privileges: PropTypes.string.isRequired,
-  }),
-  hasExceededCollaboratorLimit: PropTypes.bool.isRequired,
-  canAddCollaborators: PropTypes.bool.isRequired,
-}
 
 type SelectPrivilegeProps = {
   value: string
@@ -227,7 +245,7 @@ function SelectPrivilege({
 
   const privileges = useMemo(
     (): Privilege[] =>
-      getMeta('ol-isReviewerRoleEnabled')
+      features.trackChangesVisible
         ? [
             { key: 'owner', label: t('make_owner') },
             { key: 'readAndWrite', label: t('editor') },
@@ -241,7 +259,7 @@ function SelectPrivilege({
             { key: 'readOnly', label: t('viewer') },
             { key: 'removeAccess', label: t('remove_access') },
           ],
-    [t]
+    [features.trackChangesVisible, t]
   )
 
   const downgradedPseudoPrivilege: Privilege = {
@@ -254,27 +272,13 @@ function SelectPrivilege({
       return ''
     }
 
-    if (hasBeenDowngraded) {
-      if (isSplitTestEnabled('reviewer-role')) {
-        return t('limited_to_n_editors_or_reviewers', {
-          count: features.collaborators,
-        })
-      } else {
-        return t('limited_to_n_editors', { count: features.collaborators })
-      }
-    } else if (
-      !canAddCollaborators &&
-      !['readAndWrite', 'review'].includes(value)
+    if (
+      hasBeenDowngraded ||
+      (!canAddCollaborators && !['readAndWrite', 'review'].includes(value))
     ) {
-      if (isSplitTestEnabled('reviewer-role')) {
-        return t('limited_to_n_editors_or_reviewers_per_project', {
-          count: features.collaborators,
-        })
-      } else {
-        return t('limited_to_n_editors_per_project', {
-          count: features.collaborators,
-        })
-      }
+      return t('limited_to_n_collaborators_per_project', {
+        count: features.collaborators,
+      })
     } else {
       return ''
     }

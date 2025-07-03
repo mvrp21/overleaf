@@ -201,9 +201,6 @@ describe('ProjectController', function () {
         getCurrentAffiliations: sinon.stub().resolves([]),
       },
     }
-    this.SubscriptionViewModelBuilder = {
-      getBestSubscription: sinon.stub().yields(null, { type: 'free' }),
-    }
     this.SurveyHandler = {
       getSurvey: sinon.stub().yields(null, {}),
     }
@@ -303,6 +300,7 @@ describe('ProjectController', function () {
         translate() {},
       },
       ip: '192.170.18.1',
+      capabilitySet: new Set(['chat']),
     }
     this.res = {
       locals: {
@@ -1088,72 +1086,12 @@ describe('ProjectController', function () {
       this.ProjectController.loadEditor(this.req, this.res)
     })
 
-    describe('chatEnabled flag', function () {
-      it('should be set to false when the feature is disabled', function (done) {
+    describe('capabilitySet', function () {
+      it('should be passed as an array when loading the editor', function (done) {
         this.Features.hasFeature = sinon.stub().withArgs('chat').returns(false)
 
         this.res.render = (pageName, opts) => {
-          expect(opts.chatEnabled).to.be.false
-          done()
-        }
-        this.ProjectController.loadEditor(this.req, this.res)
-      })
-
-      it('should be set to false when the feature is enabled but the capability is not available', function (done) {
-        this.Features.hasFeature = sinon.stub().withArgs('chat').returns(false)
-        this.req.capabilitySet = new Set()
-
-        this.res.render = (pageName, opts) => {
-          expect(opts.chatEnabled).to.be.false
-          done()
-        }
-        this.ProjectController.loadEditor(this.req, this.res)
-      })
-
-      it('should be set to true when the feature is enabled and the capability is available', function (done) {
-        this.Features.hasFeature = sinon.stub().withArgs('chat').returns(true)
-        this.req.capabilitySet = new Set(['chat'])
-
-        this.res.render = (pageName, opts) => {
-          expect(opts.chatEnabled).to.be.true
-          done()
-        }
-        this.ProjectController.loadEditor(this.req, this.res)
-      })
-    })
-
-    describe('when fetching the users featureSet', function () {
-      beforeEach(function () {
-        this.Modules.promises.hooks.fire = sinon.stub().resolves()
-        this.user.features = {}
-      })
-
-      it('should take into account features overrides from modules', function (done) {
-        // this case occurs when the user has bought the ai bundle on WF, which should include our error assistant
-        const bundleFeatures = { aiErrorAssistant: true }
-        this.user.features = { aiErrorAssistant: false }
-        this.Modules.promises.hooks.fire = sinon
-          .stub()
-          .resolves([bundleFeatures])
-        this.res.render = (pageName, opts) => {
-          expect(opts.user.features).to.deep.equal(bundleFeatures)
-          this.Modules.promises.hooks.fire.should.have.been.calledWith(
-            'getModuleProvidedFeatures',
-            this.user._id
-          )
-          done()
-        }
-        this.ProjectController.loadEditor(this.req, this.res)
-      })
-
-      it('should handle modules not returning any features', function (done) {
-        this.Modules.promises.hooks.fire = sinon.stub().resolves([])
-        this.res.render = (pageName, opts) => {
-          expect(opts.user.features).to.deep.equal({})
-          this.Modules.promises.hooks.fire.should.have.been.calledWith(
-            'getModuleProvidedFeatures',
-            this.user._id
-          )
+          expect(opts.capabilities).to.deep.equal(['chat'])
           done()
         }
         this.ProjectController.loadEditor(this.req, this.res)

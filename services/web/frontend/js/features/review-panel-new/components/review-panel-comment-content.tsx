@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react'
+import { Dispatch, memo, SetStateAction, useCallback, useState } from 'react'
 import { Change, CommentOperation } from '../../../../../types/change'
 import { ReviewPanelMessage } from './review-panel-message'
 import { useTranslation } from 'react-i18next'
@@ -21,8 +21,8 @@ export const ReviewPanelCommentContent = memo<{
   onDeleteMessage?: (commentId: CommentId) => Promise<void>
   onDeleteThread?: (threadId: ThreadId) => Promise<void>
   onResolve?: () => Promise<void>
-  onLeave?: (changeId: string) => void
-  onEnter?: (changeId: string) => void
+  onLeave?: () => void
+  onEnter?: () => void
 }>(
   ({
     comment,
@@ -41,7 +41,7 @@ export const ReviewPanelCommentContent = memo<{
     const [submitting, setSubmitting] = useState(false)
 
     const handleSubmit = useCallback(
-      (content, setContent) => {
+      (content: string, setContent: Dispatch<SetStateAction<string>>) => {
         if (!onReply || submitting) {
           return
         }
@@ -69,8 +69,8 @@ export const ReviewPanelCommentContent = memo<{
     return (
       <div
         className="review-panel-entry-content"
-        onMouseEnter={onEnter && (() => onEnter(comment.id))}
-        onMouseLeave={onLeave && (() => onLeave(comment.id))}
+        onMouseEnter={onEnter}
+        onMouseLeave={onLeave}
       >
         {thread.messages.map((message, i) => {
           const isReply = i !== 0

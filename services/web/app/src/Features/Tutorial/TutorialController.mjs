@@ -8,10 +8,15 @@ const VALID_KEYS = [
   'writefull-oauth-promotion',
   'bib-file-tpr-prompt',
   'ai-error-assistant-consent',
-  'code-editor-mode-prompt',
   'history-restore-promo',
   'us-gov-banner',
   'us-gov-banner-fedramp',
+  'full-project-search-promo',
+  'editor-popup-ux-survey',
+  'wf-features-moved',
+  'review-mode',
+  'new-error-logs-promo',
+  'try-redesign-again-nudge-promo',
 ]
 
 async function completeTutorial(req, res, next) {

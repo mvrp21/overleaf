@@ -17,8 +17,8 @@ import {
   CodeMirrorViewContext,
 } from './codemirror-context'
 import MathPreviewTooltip from './math-preview-tooltip'
-import Breadcrumbs from '@/features/ide-redesign/components/breadcrumbs'
-import { useIsNewEditorEnabled } from '@/features/ide-redesign/utils/new-editor-utils'
+import { useToolbarMenuBarEditorCommands } from '@/features/ide-redesign/hooks/use-toolbar-menu-editor-commands'
+import { useProjectContext } from '@/shared/context/project-context'
 
 // TODO: remove this when definitely no longer used
 export * from './codemirror-context'
@@ -38,8 +38,6 @@ function CodeMirrorEditor() {
   })
 
   const isMounted = useIsMounted()
-
-  const newEditor = useIsNewEditorEnabled()
 
   // create the view using the initial state and intercept transactions
   const viewRef = useRef<EditorView | null>(null)
@@ -62,32 +60,40 @@ function CodeMirrorEditor() {
   return (
     <CodeMirrorStateContext.Provider value={state}>
       <CodeMirrorViewContext.Provider value={viewRef.current}>
-        <ReviewPanelProviders>
-          <CodemirrorOutline />
-          <CodeMirrorView />
-          <FigureModal />
-          <CodeMirrorSearch />
-          <CodeMirrorToolbar />
-          {sourceEditorToolbarComponents.map(
-            ({ import: { default: Component }, path }) => (
-              <Component key={path} />
-            )
-          )}
-          {newEditor && <Breadcrumbs />}
-          <CodeMirrorCommandTooltip />
-
-          <MathPreviewTooltip />
-          <ReviewTooltipMenu />
-          <ReviewPanelNew />
-
-          {sourceEditorComponents.map(
-            ({ import: { default: Component }, path }) => (
-              <Component key={path} />
-            )
-          )}
-        </ReviewPanelProviders>
+        <CodeMirrorEditorComponents />
       </CodeMirrorViewContext.Provider>
     </CodeMirrorStateContext.Provider>
+  )
+}
+
+function CodeMirrorEditorComponents() {
+  useToolbarMenuBarEditorCommands()
+  const { features } = useProjectContext()
+
+  return (
+    <ReviewPanelProviders>
+      <CodemirrorOutline />
+      <CodeMirrorView />
+      <FigureModal />
+      <CodeMirrorSearch />
+      <CodeMirrorToolbar />
+      {sourceEditorToolbarComponents.map(
+        ({ import: { default: Component }, path }) => (
+          <Component key={path} />
+        )
+      )}
+      <CodeMirrorCommandTooltip />
+
+      <MathPreviewTooltip />
+      {features.trackChangesVisible && <ReviewTooltipMenu />}
+      {features.trackChangesVisible && <ReviewPanelNew />}
+
+      {sourceEditorComponents.map(
+        ({ import: { default: Component }, path }) => (
+          <Component key={path} />
+        )
+      )}
+    </ReviewPanelProviders>
   )
 }
 

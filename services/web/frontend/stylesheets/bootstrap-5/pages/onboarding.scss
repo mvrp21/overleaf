@@ -59,10 +59,6 @@
         display: flex;
         align-items: center;
         gap: var(--spacing-04);
-
-        button.btn-info-ghost {
-          color: var(--neutral-90);
-        }
       }
     }
   }
@@ -110,7 +106,6 @@
   user-select: none;
 }
 
-.onboarding-collapse-button,
 .onboarding-privacy-extended {
   @include media-breakpoint-down(md) {
     padding: 0 var(--spacing-08);

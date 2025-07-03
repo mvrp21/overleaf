@@ -2,7 +2,15 @@ import {
   useCodeMirrorStateContext,
   useCodeMirrorViewContext,
 } from './codemirror-context'
-import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FC,
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { runScopeHandlers } from '@codemirror/view'
 import {
   closeSearchPanel,
@@ -28,6 +36,7 @@ import { getStoredSelection, setStoredSelection } from '../extensions/search'
 import { debounce } from 'lodash'
 import { EditorSelection, EditorState } from '@codemirror/state'
 import { sendSearchEvent } from '@/features/event-tracking/search-events'
+import { FullProjectSearchButton } from './full-project-search-button'
 
 const MATCH_COUNT_DEBOUNCE_WAIT = 100 // the amount of ms to wait before counting matches
 const MAX_MATCH_COUNT = 999 // the maximum number of matches to count
@@ -46,7 +55,7 @@ type MatchPositions = {
   interrupted: boolean
 }
 
-const CodeMirrorSearchForm: FC = () => {
+const CodeMirrorSearchForm: FC<React.PropsWithChildren> = () => {
   const view = useCodeMirrorViewContext()
   const state = useCodeMirrorStateContext()
 
@@ -72,7 +81,7 @@ const CodeMirrorSearchForm: FC = () => {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const replaceRef = useRef<HTMLInputElement | null>(null)
 
-  const handleInputRef = useCallback(node => {
+  const handleInputRef = useCallback((node: HTMLInputElement) => {
     inputRef.current = node
 
     // focus the search input when the panel opens
@@ -82,11 +91,11 @@ const CodeMirrorSearchForm: FC = () => {
     }
   }, [])
 
-  const handleReplaceRef = useCallback(node => {
+  const handleReplaceRef = useCallback((node: HTMLInputElement) => {
     replaceRef.current = node
   }, [])
 
-  const handleSubmit = useCallback(event => {
+  const handleSubmit = useCallback((event: FormEvent) => {
     event.preventDefault()
   }, [])
 
@@ -119,8 +128,8 @@ const CodeMirrorSearchForm: FC = () => {
   }, [handleChange, state, view])
 
   const handleFormKeyDown = useCallback(
-    event => {
-      if (runScopeHandlers(view, event, 'search-panel')) {
+    (event: React.KeyboardEvent<HTMLFormElement>) => {
+      if (runScopeHandlers(view, event.nativeEvent, 'search-panel')) {
         event.preventDefault()
       }
     },
@@ -129,7 +138,7 @@ const CodeMirrorSearchForm: FC = () => {
 
   // Returns true if the event was handled, false otherwise
   const handleEmacsNavigation = useCallback(
-    event => {
+    (event: KeyboardEvent) => {
       const emacsCtrlSeq =
         emacsKeybindingsActive &&
         event.ctrlKey &&
@@ -157,7 +166,14 @@ const CodeMirrorSearchForm: FC = () => {
           event.stopPropagation()
           event.preventDefault()
           closeSearchPanel(view)
-          document.dispatchEvent(new CustomEvent('cm:emacs-close-search-panel'))
+          // Wait for the search panel to close before moving the cursor
+          window.setTimeout(
+            () =>
+              document.dispatchEvent(
+                new CustomEvent('cm:emacs-close-search-panel')
+              ),
+            0
+          )
           return true
         }
         default: {
@@ -169,7 +185,7 @@ const CodeMirrorSearchForm: FC = () => {
   )
 
   const handleSearchKeyDown = useCallback(
-    event => {
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
       switch (event.key) {
         case 'Enter':
           event.preventDefault()
@@ -185,13 +201,13 @@ const CodeMirrorSearchForm: FC = () => {
           }
           break
       }
-      handleEmacsNavigation(event)
+      handleEmacsNavigation(event.nativeEvent)
     },
     [view, handleEmacsNavigation, emacsKeybindingsActive]
   )
 
   const handleReplaceKeyDown = useCallback(
-    event => {
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
       switch (event.key) {
         case 'Enter':
           event.preventDefault()
@@ -210,7 +226,7 @@ const CodeMirrorSearchForm: FC = () => {
           }
         }
       }
-      handleEmacsNavigation(event)
+      handleEmacsNavigation(event.nativeEvent)
     },
     [view, handleEmacsNavigation]
   )
@@ -423,6 +439,8 @@ const CodeMirrorSearchForm: FC = () => {
               />
             </OLButton>
           </OLButtonGroup>
+
+          <FullProjectSearchButton query={query} />
 
           {position !== null && (
             <div className="ol-cm-search-form-position">

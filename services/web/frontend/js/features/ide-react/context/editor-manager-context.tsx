@@ -18,6 +18,7 @@ import { useConnectionContext } from '@/features/ide-react/context/connection-co
 import { debugConsole } from '@/utils/debugging'
 import { DocumentContainer } from '@/features/ide-react/editor/document-container'
 import { useLayoutContext } from '@/shared/context/layout-context'
+import { useUserContext } from '@/shared/context/user-context'
 import { GotoLineOptions } from '@/features/ide-react/types/goto-line-options'
 import { Doc } from '../../../../../types/doc'
 import { useFileTreeData } from '@/shared/context/file-tree-data-context'
@@ -35,9 +36,8 @@ import { DocId } from '../../../../../types/project-settings'
 import { Update } from '@/features/history/services/types/update'
 import { useDebugDiffTracker } from '../hooks/use-debug-diff-tracker'
 import { useEditorContext } from '@/shared/context/editor-context'
-import useScopeValueSetterOnly from '@/shared/hooks/use-scope-value-setter-only'
-import { BinaryFile } from '@/features/file-view/types/binary-file'
 import { convertFileRefToBinaryFile } from '@/features/ide-react/util/file-view'
+import { useEditorOpenDocContext } from '@/features/ide-react/context/editor-open-doc-context'
 
 export interface GotoOffsetOptions {
   gotoOffset: number
@@ -54,8 +54,6 @@ interface OpenDocOptions
 export type EditorManager = {
   getEditorType: () => EditorType | null
   showSymbolPalette: boolean
-  currentDocument: DocumentContainer | null
-  currentDocumentId: DocId | null
   getCurrentDocValue: () => string | null
   getCurrentDocumentId: () => DocId | null
   setIgnoringExternalUpdates: (value: boolean) => void
@@ -64,8 +62,6 @@ export type EditorManager = {
   openDocs: OpenDocuments
   openFileWithId: (fileId: string) => void
   openInitialDoc: (docId: string) => void
-  openDocName: string | null
-  setOpenDocName: (openDocName: string) => void
   isLoading: boolean
   trackChanges: boolean
   jumpToLine: (options: GotoLineOptions) => void
@@ -88,28 +84,30 @@ export const EditorManagerContext = createContext<EditorManager | undefined>(
   undefined
 )
 
-export const EditorManagerProvider: FC = ({ children }) => {
+export const EditorManagerProvider: FC<React.PropsWithChildren> = ({
+  children,
+}) => {
   const { t } = useTranslation()
   const { scopeStore } = useIdeContext()
   const { reportError, eventEmitter, projectId } = useIdeReactContext()
   const { setOutOfSync } = useEditorContext()
   const { socket, closeConnection, connectionState } = useConnectionContext()
-  const { view, setView } = useLayoutContext()
+  const { view, setView, setOpenFile } = useLayoutContext()
   const { showGenericMessageModal, genericModalVisible, showOutOfSyncModal } =
     useModalsContext()
+  const { id: userId } = useUserContext()
 
   const [showSymbolPalette, setShowSymbolPalette] = useScopeValue<boolean>(
     'editor.showSymbolPalette'
   )
   const [showVisual] = useScopeValue<boolean>('editor.showVisual')
-  const [currentDocument, setCurrentDocument] =
-    useScopeValue<DocumentContainer | null>('editor.sharejs_doc')
-  const [currentDocumentId, setCurrentDocumentId] = useScopeValue<DocId | null>(
-    'editor.open_doc_id'
-  )
-  const [openDocName, setOpenDocName] = useScopeValue<string | null>(
-    'editor.open_doc_name'
-  )
+  const {
+    currentDocumentId,
+    setCurrentDocumentId,
+    setOpenDocName,
+    currentDocument,
+    setCurrentDocument,
+  } = useEditorOpenDocContext()
   const [opening, setOpening] = useScopeValue<boolean>('editor.opening')
   const [errorState, setIsInErrorState] =
     useScopeValue<boolean>('editor.error_state')
@@ -307,7 +305,7 @@ export const EditorManagerProvider: FC = ({ children }) => {
       const tryToggle = () => {
         const saved = doc.getInflightOp() == null && doc.getPendingOp() == null
         if (saved) {
-          doc.setTrackingChanges(want)
+          doc.setTrackChangesUserId(want ? userId : null)
           setTrackChanges(want)
         } else {
           syncTimeoutRef.current = window.setTimeout(tryToggle, 100)
@@ -316,7 +314,7 @@ export const EditorManagerProvider: FC = ({ children }) => {
 
       tryToggle()
     },
-    [setTrackChanges]
+    [setTrackChanges, userId]
   )
 
   const doOpenNewDocument = useCallback(
@@ -517,8 +515,6 @@ export const EditorManagerProvider: FC = ({ children }) => {
     [fileTreeData, openDoc]
   )
 
-  const [, setOpenFile] = useScopeValueSetterOnly<BinaryFile | null>('openFile')
-
   const openFileWithId = useCallback(
     (fileRefId: string) => {
       const fileRef = findFileRefEntityById(fileTreeData, fileRefId)
@@ -580,7 +576,7 @@ export const EditorManagerProvider: FC = ({ children }) => {
         editorContent =
           typeof editorContent === 'string'
             ? editorContent
-            : document.doc?._doc.snapshot
+            : document.getSnapshot()
 
         // Tear down the ShareJsDoc.
         if (document.doc) document.doc.clearInflightAndPendingOps()
@@ -634,13 +630,6 @@ export const EditorManagerProvider: FC = ({ children }) => {
   )
 
   useEventListener(
-    'flush-changes',
-    useCallback(() => {
-      openDocs.flushAll()
-    }, [openDocs])
-  )
-
-  useEventListener(
     'blur',
     useCallback(() => {
       openDocs.flushAll()
@@ -674,16 +663,12 @@ export const EditorManagerProvider: FC = ({ children }) => {
     () => ({
       getEditorType,
       showSymbolPalette,
-      currentDocument,
-      currentDocumentId,
       getCurrentDocValue,
       getCurrentDocumentId,
       setIgnoringExternalUpdates,
       openDocWithId,
       openDoc,
       openDocs,
-      openDocName,
-      setOpenDocName,
       trackChanges,
       isLoading,
       openFileWithId,
@@ -696,8 +681,6 @@ export const EditorManagerProvider: FC = ({ children }) => {
     [
       getEditorType,
       showSymbolPalette,
-      currentDocument,
-      currentDocumentId,
       getCurrentDocValue,
       getCurrentDocumentId,
       setIgnoringExternalUpdates,
@@ -706,8 +689,6 @@ export const EditorManagerProvider: FC = ({ children }) => {
       openDocs,
       openFileWithId,
       openInitialDoc,
-      openDocName,
-      setOpenDocName,
       trackChanges,
       isLoading,
       jumpToLine,

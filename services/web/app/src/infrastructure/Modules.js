@@ -4,6 +4,7 @@ const { promisify, callbackify } = require('util')
 const Settings = require('@overleaf/settings')
 const Views = require('./Views')
 const _ = require('lodash')
+const Metrics = require('@overleaf/metrics')
 
 const MODULE_BASE_PATH = Path.join(__dirname, '/../../../modules')
 
@@ -15,35 +16,28 @@ let _viewIncludes = {}
 
 async function modules() {
   if (!_modulesLoaded) {
+    const beforeLoadModules = performance.now()
     await loadModules()
+    Metrics.gauge('web_startup', performance.now() - beforeLoadModules, 1, {
+      path: 'loadModules',
+    })
   }
   return _modules
 }
 
 async function loadModulesImpl() {
-  const settingsCheckModuleCjs = Path.join(
-    MODULE_BASE_PATH,
-    'settings-check',
-    'index.js'
-  )
-  const settingsCheckModuleEsm = Path.join(
+  const settingsCheckModule = Path.join(
     MODULE_BASE_PATH,
     'settings-check',
     'index.mjs'
   )
-  if (fs.existsSync(settingsCheckModuleCjs)) {
-    await import(settingsCheckModuleCjs)
-  } else if (fs.existsSync(settingsCheckModuleEsm)) {
-    await import(settingsCheckModuleEsm)
+  if (fs.existsSync(settingsCheckModule)) {
+    await import(settingsCheckModule)
   }
   for (const moduleName of Settings.moduleImportSequence || []) {
-    let path
-    if (fs.existsSync(Path.join(MODULE_BASE_PATH, moduleName, 'index.mjs'))) {
-      path = Path.join(MODULE_BASE_PATH, moduleName, 'index.mjs')
-    } else {
-      path = Path.join(MODULE_BASE_PATH, moduleName, 'index.js')
-    }
-    const module = await import(path)
+    const module = await import(
+      Path.join(MODULE_BASE_PATH, moduleName, 'index.mjs')
+    )
     const loadedModule = module.default || module
 
     loadedModule.name = moduleName

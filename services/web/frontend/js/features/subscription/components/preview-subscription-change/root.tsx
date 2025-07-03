@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import moment from 'moment'
 import { useTranslation, Trans } from 'react-i18next'
 import {
@@ -11,7 +11,7 @@ import { formatCurrency } from '@/shared/utils/currency'
 import useAsync from '@/shared/hooks/use-async'
 import { useLocation } from '@/shared/hooks/use-location'
 import { debugConsole } from '@/utils/debugging'
-import { postJSON } from '@/infrastructure/fetch-json'
+import { FetchError, postJSON } from '@/infrastructure/fetch-json'
 import Notification from '@/shared/components/notification'
 import OLCard from '@/features/ui/components/ol/ol-card'
 import OLRow from '@/features/ui/components/ol/ol-row'
@@ -20,24 +20,53 @@ import OLButton from '@/features/ui/components/ol/ol-button'
 import { subscriptionUpdateUrl } from '@/features/subscription/data/subscription-url'
 import * as eventTracking from '@/infrastructure/event-tracking'
 import sparkleText from '@/shared/svgs/ai-sparkle-text.svg'
+import { useFeatureFlag } from '@/shared/context/split-test-context'
+import handleStripePaymentAction from '../../util/handle-stripe-payment-action'
 
 function PreviewSubscriptionChange() {
   const preview = getMeta(
     'ol-subscriptionChangePreview'
   ) as SubscriptionChangePreview
+  const purchaseReferrer = getMeta('ol-purchaseReferrer')
   const { t } = useTranslation()
   const payNowTask = useAsync()
   const location = useLocation()
+  const aiAssistEnabled = useFeatureFlag('overleaf-assist-bundle')
+
+  useEffect(() => {
+    if (preview.change.type === 'add-on-purchase') {
+      eventTracking.sendMB('preview-subscription-change-view', {
+        plan: preview.change.addOn.code,
+        upgradeType: 'add-on',
+        referrer: purchaseReferrer,
+      })
+    }
+  }, [preview.change, purchaseReferrer])
 
   const handlePayNowClick = useCallback(() => {
+    if (preview.change.type === 'add-on-purchase') {
+      eventTracking.sendMB('subscription-change-form-submit', {
+        plan: preview.change.addOn.code,
+        upgradeType: 'add-on',
+        referrer: purchaseReferrer,
+      })
+    }
+
     eventTracking.sendMB('assistant-add-on-purchase')
     payNowTask
       .runAsync(payNow(preview))
       .then(() => {
+        if (preview.change.type === 'add-on-purchase') {
+          eventTracking.sendMB('subscription-change-form-success', {
+            plan: preview.change.addOn.code,
+            upgradeType: 'add-on',
+            referrer: purchaseReferrer,
+          })
+        }
         location.replace('/user/subscription/thank-you')
       })
       .catch(debugConsole.error)
-  }, [location, payNowTask, preview])
+  }, [purchaseReferrer, location, payNowTask, preview])
 
   const aiAddOnChange =
     preview.change.type === 'add-on-purchase' &&
@@ -81,20 +110,37 @@ function PreviewSubscriptionChange() {
 
             {aiAddOnChange && (
               <div>
-                <Trans
-                  i18nKey="add_error_assist_to_your_projects"
-                  components={{
-                    sparkle: (
-                      <img
-                        alt="sparkle"
-                        className="ai-error-assistant-sparkle"
-                        src={sparkleText}
-                        aria-hidden="true"
-                        key="sparkle"
-                      />
-                    ),
-                  }}
-                />
+                {aiAssistEnabled ? (
+                  <Trans
+                    i18nKey="add_ai_assist_to_your_plan"
+                    components={{
+                      sparkle: (
+                        <img
+                          alt="sparkle"
+                          className="ai-error-assistant-sparkle"
+                          src={sparkleText}
+                          aria-hidden="true"
+                          key="sparkle"
+                        />
+                      ),
+                    }}
+                  />
+                ) : (
+                  <Trans
+                    i18nKey="add_error_assist_to_your_projects"
+                    components={{
+                      sparkle: (
+                        <img
+                          alt="sparkle"
+                          className="ai-error-assistant-sparkle"
+                          src={sparkleText}
+                          aria-hidden="true"
+                          key="sparkle"
+                        />
+                      ),
+                    }}
+                  />
+                )}
               </div>
             )}
 
@@ -234,16 +280,25 @@ function PreviewSubscriptionChange() {
 }
 
 async function payNow(preview: SubscriptionChangePreview) {
-  if (preview.change.type === 'add-on-purchase') {
-    await postJSON(`/user/subscription/addon/${preview.change.addOn.code}/add`)
-  } else if (preview.change.type === 'premium-subscription') {
-    await postJSON(subscriptionUpdateUrl, {
-      body: { plan_code: preview.change.plan.code },
-    })
-  } else {
-    throw new Error(
-      `Unknown subscription change preview type: ${preview.change}`
-    )
+  try {
+    if (preview.change.type === 'add-on-purchase') {
+      await postJSON(
+        `/user/subscription/addon/${preview.change.addOn.code}/add`
+      )
+    } else if (preview.change.type === 'premium-subscription') {
+      await postJSON(subscriptionUpdateUrl, {
+        body: { plan_code: preview.change.plan.code },
+      })
+    } else {
+      throw new Error(
+        `Unknown subscription change preview type: ${preview.change}`
+      )
+    }
+  } catch (e) {
+    const { handled } = await handleStripePaymentAction(e as FetchError)
+    if (!handled) {
+      throw e
+    }
   }
 }
 

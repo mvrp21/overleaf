@@ -102,38 +102,65 @@ describe('SubscriptionHelper', function () {
   })
 
   describe('shouldPlanChangeAtTermEnd', function () {
-    it('should return true if the new plan is less expensive', function () {
+    it('should return false if isInTrial is true', function () {
+      const isInTrial = true
       const changeAtTermEnd = this.SubscriptionHelper.shouldPlanChangeAtTermEnd(
         plans.expensive,
-        plans.cheaper
+        plans.cheaper,
+        isInTrial
+      )
+      expect(changeAtTermEnd).to.be.false
+    })
+
+    it('should return true if the new plan is less expensive', function () {
+      const isInTrial = false
+      const changeAtTermEnd = this.SubscriptionHelper.shouldPlanChangeAtTermEnd(
+        plans.expensive,
+        plans.cheaper,
+        isInTrial
       )
       expect(changeAtTermEnd).to.be.true
     })
+
     it('should return false if the new plan is more exepensive', function () {
+      const isInTrial = false
       const changeAtTermEnd = this.SubscriptionHelper.shouldPlanChangeAtTermEnd(
         plans.cheaper,
-        plans.expensive
+        plans.expensive,
+        isInTrial
       )
       expect(changeAtTermEnd).to.be.false
     })
+
     it('should return false if the new plan is the same price', function () {
+      const isInTrial = false
+
       const changeAtTermEnd = this.SubscriptionHelper.shouldPlanChangeAtTermEnd(
         plans.cheaper,
-        plans.alsoCheap
+        plans.alsoCheap,
+        isInTrial
       )
       expect(changeAtTermEnd).to.be.false
     })
+
     it('should return false if the change is from an individual plan to a more expensive group plan', function () {
+      const isInTrial = false
+
       const changeAtTermEnd = this.SubscriptionHelper.shouldPlanChangeAtTermEnd(
         plans.expensive,
-        plans.expensiveGroup
+        plans.expensiveGroup,
+        isInTrial
       )
       expect(changeAtTermEnd).to.be.false
     })
+
     it('should return true if the change is from an individual plan to a cheaper group plan', function () {
+      const isInTrial = false
+
       const changeAtTermEnd = this.SubscriptionHelper.shouldPlanChangeAtTermEnd(
         plans.expensive,
-        plans.cheapGroup
+        plans.cheapGroup,
+        isInTrial
       )
       expect(changeAtTermEnd).to.be.true
     })
@@ -157,10 +184,6 @@ describe('SubscriptionHelper', function () {
             collaborator: '5 CHF',
             professional: '50 CHF',
           },
-          pricePerUserPerMonth: {
-            collaborator: '0,45 CHF',
-            professional: '4,20 CHF',
-          },
         })
       })
     })
@@ -182,10 +205,6 @@ describe('SubscriptionHelper', function () {
             collaborator: '10 kr.',
             professional: '100 kr.',
           },
-          pricePerUserPerMonth: {
-            collaborator: '0,85 kr.',
-            professional: '8,35 kr.',
-          },
         })
       })
     })
@@ -206,10 +225,6 @@ describe('SubscriptionHelper', function () {
           pricePerUser: {
             collaborator: '15 kr',
             professional: '150 kr',
-          },
-          pricePerUserPerMonth: {
-            collaborator: '1,25 kr',
-            professional: '12,50 kr',
           },
         })
       })
@@ -234,10 +249,6 @@ describe('SubscriptionHelper', function () {
             collaborator: 'kr 20',
             professional: 'kr 200',
           },
-          pricePerUserPerMonth: {
-            collaborator: 'kr 1.70',
-            professional: 'kr 16.70',
-          },
         })
       })
     })
@@ -259,12 +270,233 @@ describe('SubscriptionHelper', function () {
             collaborator: '$25',
             professional: '$250',
           },
-          pricePerUserPerMonth: {
-            collaborator: '$2.10',
-            professional: '$20.85',
-          },
         })
       })
+    })
+  })
+
+  describe('isPaidSubscription', function () {
+    it('should return true for a subscription with a recurly subscription id', function () {
+      const result = this.SubscriptionHelper.isPaidSubscription({
+        recurlySubscription_id: 'some-id',
+      })
+      expect(result).to.be.true
+    })
+
+    it('should return true for a subscription with a stripe subscription id', function () {
+      const result = this.SubscriptionHelper.isPaidSubscription({
+        paymentProvider: { subscriptionId: 'some-id' },
+      })
+      expect(result).to.be.true
+    })
+
+    it('should return false for a free subscription', function () {
+      const result = this.SubscriptionHelper.isPaidSubscription({})
+      expect(result).to.be.false
+    })
+
+    it('should return false for a missing subscription', function () {
+      const result = this.SubscriptionHelper.isPaidSubscription()
+      expect(result).to.be.false
+    })
+  })
+
+  describe('isIndividualActivePaidSubscription', function () {
+    it('should return true for an active recurly subscription', function () {
+      const result = this.SubscriptionHelper.isIndividualActivePaidSubscription(
+        {
+          groupPlan: false,
+          recurlyStatus: { state: 'active' },
+          recurlySubscription_id: 'some-id',
+        }
+      )
+      expect(result).to.be.true
+    })
+
+    it('should return true for an active stripe subscription', function () {
+      const result = this.SubscriptionHelper.isIndividualActivePaidSubscription(
+        {
+          groupPlan: false,
+          paymentProvider: { subscriptionId: 'sub_123', state: 'active' },
+        }
+      )
+      expect(result).to.be.true
+    })
+
+    it('should return false for a canceled recurly subscription', function () {
+      const result = this.SubscriptionHelper.isIndividualActivePaidSubscription(
+        {
+          groupPlan: false,
+          recurlyStatus: { state: 'canceled' },
+          recurlySubscription_id: 'some-id',
+        }
+      )
+      expect(result).to.be.false
+    })
+
+    it('should return false for a canceled stripe subscription', function () {
+      const result = this.SubscriptionHelper.isIndividualActivePaidSubscription(
+        {
+          groupPlan: false,
+          paymentProvider: { state: 'canceled', subscriptionId: 'sub_123' },
+        }
+      )
+      expect(result).to.be.false
+    })
+
+    it('should return false for a group plan subscription', function () {
+      const result = this.SubscriptionHelper.isIndividualActivePaidSubscription(
+        {
+          groupPlan: true,
+          recurlyStatus: { state: 'active' },
+          recurlySubscription_id: 'some-id',
+        }
+      )
+      expect(result).to.be.false
+    })
+
+    it('should return false for a free subscription', function () {
+      const result = this.SubscriptionHelper.isIndividualActivePaidSubscription(
+        {}
+      )
+      expect(result).to.be.false
+    })
+
+    it('should return false for a subscription with an empty string for recurlySubscription_id', function () {
+      const result = this.SubscriptionHelper.isIndividualActivePaidSubscription(
+        {
+          groupPlan: false,
+          recurlySubscription_id: '',
+          recurlyStatus: { state: 'active' },
+        }
+      )
+      expect(result).to.be.false
+    })
+
+    it('should return false for a subscription with an empty string for paymentProvider.subscriptionId', function () {
+      const result = this.SubscriptionHelper.isIndividualActivePaidSubscription(
+        {
+          groupPlan: false,
+          paymentProvider: { state: 'active', subscriptionId: '' },
+        }
+      )
+      expect(result).to.be.false
+    })
+
+    it('should return false for a missing subscription', function () {
+      const result = this.SubscriptionHelper.isPaidSubscription()
+      expect(result).to.be.false
+    })
+  })
+
+  describe('getPaymentProviderSubscriptionId', function () {
+    it('should return the recurly subscription id if it exists', function () {
+      const result = this.SubscriptionHelper.getPaymentProviderSubscriptionId({
+        recurlySubscription_id: 'some-id',
+      })
+      expect(result).to.equal('some-id')
+    })
+
+    it('should return the payment provider subscription id if it exists', function () {
+      const result = this.SubscriptionHelper.getPaymentProviderSubscriptionId({
+        paymentProvider: { subscriptionId: 'sub_123' },
+      })
+      expect(result).to.equal('sub_123')
+    })
+
+    it('should return null if no subscription id exists', function () {
+      const result = this.SubscriptionHelper.getPaymentProviderSubscriptionId(
+        {}
+      )
+      expect(result).to.be.null
+    })
+  })
+
+  describe('getPaidSubscriptionState', function () {
+    it('should return the recurly state if it exists', function () {
+      const result = this.SubscriptionHelper.getPaidSubscriptionState({
+        recurlyStatus: { state: 'active' },
+      })
+      expect(result).to.equal('active')
+    })
+
+    it('should return the payment provider state if it exists', function () {
+      const result = this.SubscriptionHelper.getPaidSubscriptionState({
+        paymentProvider: { state: 'active' },
+      })
+      expect(result).to.equal('active')
+    })
+
+    it('should return null if no state exists', function () {
+      const result = this.SubscriptionHelper.getPaidSubscriptionState({})
+      expect(result).to.be.null
+    })
+  })
+
+  describe('getSubscriptionTrialStartedAt', function () {
+    it('should return the recurly trial start date if it exists', function () {
+      const result = this.SubscriptionHelper.getSubscriptionTrialStartedAt({
+        recurlySubscription_id: 'some-id',
+        recurlyStatus: { trialStartedAt: new Date('2023-01-01') },
+      })
+      expect(result).to.deep.equal(new Date('2023-01-01'))
+    })
+
+    it('should return the payment provider trial start date if it exists', function () {
+      const result = this.SubscriptionHelper.getSubscriptionTrialStartedAt({
+        recurlyStatus: {},
+        paymentProvider: { trialStartedAt: new Date('2023-01-01') },
+      })
+      expect(result).to.deep.equal(new Date('2023-01-01'))
+    })
+
+    it('should return undefined if no trial start date exists', function () {
+      const result = this.SubscriptionHelper.getSubscriptionTrialStartedAt({})
+      expect(result).to.be.undefined
+    })
+  })
+
+  describe('getSubscriptionTrialEndsAt', function () {
+    it('should return the recurly trial end date if it exists', function () {
+      const result = this.SubscriptionHelper.getSubscriptionTrialEndsAt({
+        recurlySubscription_id: 'some-id',
+        recurlyStatus: { trialEndsAt: new Date('2023-01-01') },
+      })
+      expect(result).to.deep.equal(new Date('2023-01-01'))
+    })
+
+    it('should return the payment provider trial end date if it exists', function () {
+      const result = this.SubscriptionHelper.getSubscriptionTrialEndsAt({
+        recurlyStatus: {},
+        paymentProvider: { trialEndsAt: new Date('2023-01-01') },
+      })
+      expect(result).to.deep.equal(new Date('2023-01-01'))
+    })
+
+    it('should return undefined if no trial end date exists', function () {
+      const result = this.SubscriptionHelper.getSubscriptionTrialEndsAt({})
+      expect(result).to.be.undefined
+    })
+  })
+
+  describe('isInTrial', function () {
+    it('should return false if trialEndsAt is null', function () {
+      const result = this.SubscriptionHelper.isInTrial(null)
+      expect(result).to.be.false
+    })
+
+    it('should return false if trialEndsAt is before now', function () {
+      const tenDaysAgo = new Date()
+      tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
+      const result = this.SubscriptionHelper.isInTrial(tenDaysAgo)
+      expect(result).to.be.false
+    })
+
+    it('should return true if trialEndsAt is after now', function () {
+      const tenDaysFromNow = new Date()
+      tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10)
+      const result = this.SubscriptionHelper.isInTrial(tenDaysFromNow)
+      expect(result).to.be.true
     })
   })
 })

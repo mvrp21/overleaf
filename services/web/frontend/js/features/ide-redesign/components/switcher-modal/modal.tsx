@@ -14,6 +14,9 @@ import {
 import Notification from '@/shared/components/notification'
 import { useSwitchEnableNewEditorState } from '../../hooks/use-switch-enable-new-editor-state'
 import { Trans, useTranslation } from 'react-i18next'
+import { useEditorAnalytics } from '@/shared/hooks/use-editor-analytics'
+import { useFeatureFlag } from '@/shared/context/split-test-context'
+import { useSurveyUrl } from '../../hooks/use-survey-url'
 
 export const IdeRedesignSwitcherModal = () => {
   const { t } = useTranslation()
@@ -66,13 +69,21 @@ const SwitcherModalContentEnabled: FC<ModalContentProps> = ({
   loading,
 }) => {
   const { t } = useTranslation()
+  const { sendEvent } = useEditorAnalytics()
   const disable = useCallback(() => {
+    sendEvent('editor-redesign-toggle', {
+      action: 'disable',
+      location: 'modal',
+    })
     setEditorRedesignStatus(false)
       .then(hide)
       .catch(() => {
         // do nothing, we're already showing the error
       })
-  }, [setEditorRedesignStatus, hide])
+  }, [setEditorRedesignStatus, hide, sendEvent])
+
+  const surveyURL = useSurveyUrl()
+
   return (
     <>
       <OLModalBody>
@@ -98,7 +109,7 @@ const SwitcherModalContentEnabled: FC<ModalContentProps> = ({
           {t('cancel')}
         </OLButton>
         <OLButton
-          href="https://forms.gle/soyVStc5qDx9na1Z6"
+          href={surveyURL}
           target="_blank"
           rel="noopener noreferrer"
           variant="primary"
@@ -116,13 +127,18 @@ const SwitcherModalContentDisabled: FC<ModalContentProps> = ({
   loading,
 }) => {
   const { t } = useTranslation()
+  const { sendEvent } = useEditorAnalytics()
   const enable = useCallback(() => {
+    sendEvent('editor-redesign-toggle', {
+      action: 'enable',
+      location: 'modal',
+    })
     setEditorRedesignStatus(true)
       .then(hide)
       .catch(() => {
         // do nothing, we're already showing the error
       })
-  }, [setEditorRedesignStatus, hide])
+  }, [setEditorRedesignStatus, hide, sendEvent])
   return (
     <>
       <OLModalBody>
@@ -145,19 +161,26 @@ const SwitcherModalContentDisabled: FC<ModalContentProps> = ({
 
 const SwitcherWhatsNew = () => {
   const { t } = useTranslation()
+  const newErrorlogs = useFeatureFlag('new-editor-error-logs-redesign')
+
   return (
     <div className="ide-redesign-switcher-modal-whats-new">
-      <h4>{t('whats_new')}</h4>
+      <h4>{t('latest_updates')}</h4>
       <ul>
-        <li>{t('chat')}</li>
-        <li>{t('settings_for_git_github_and_dropbox_integrations')}</li>
-        <li>{t('dark_mode')}</li>
+        {newErrorlogs && <li>{t('new_error_logs_panel')}</li>}
+        <li>{t('searching_all_project_files_is_now_available')}</li>
+        <li>{t('double_clicking_on_the_pdf_shows')}</li>
       </ul>
       <hr />
-      <h4>{t('whats_next')}</h4>
+      <h4>{t('whats_different_in_the_new_editor')}</h4>
       <ul>
-        <li>{t('history')}</li>
-        <li>{t('review_panel_comments_and_track_changes')}</li>
+        <li>{t('new_look_and_feel')}</li>
+        <li>
+          {t('new_navigation_introducing_left_hand_side_rail_and_top_menus')}
+        </li>
+        <li>{t('new_look_and_placement_of_the_settings')}</li>
+        <li>{t('improved_dark_mode')}</li>
+        <li>{t('review_panel_and_error_logs_moved_to_the_left')}</li>
       </ul>
     </div>
   )

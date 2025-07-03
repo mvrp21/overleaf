@@ -1,3 +1,5 @@
+import { StripeCurrencyCode } from './currency'
+
 type Features = {
   collaborators: number
   compileGroup: string
@@ -22,19 +24,21 @@ export type AddOn = {
   unitAmountInCents: number
 }
 
-// add-ons directly accessed through recurly
-export type RecurlyAddOn = {
-  add_on_code: string
+// add-ons directly accessed through payment
+export type PaymentProviderAddOn = {
+  code: string
+  name: string
   quantity: number
-  unit_amount_in_cents: number
-  displayPrice: string
+  unitPrice: number
+  amount?: number
+  displayPrice?: string
 }
 
-export type PendingRecurlyPlan = {
+export type PendingPaymentProviderPlan = {
   annual?: boolean
   displayPrice?: string
   featureDescription?: Record<string, unknown>[]
-  addOns?: RecurlyAddOn[]
+  addOns?: PaymentProviderAddOn[]
   features?: Features
   groupPlan?: boolean
   hideFromUsers?: boolean
@@ -58,6 +62,7 @@ export type Plan = {
   name: string
   planCode: string
   price_in_cents: number
+  canUseFlexibleLicensing?: boolean
 }
 
 export type PriceForDisplayData = {
@@ -79,11 +84,31 @@ export type RecurlyPlanCode =
   | 'student'
   | 'student-annual'
   | 'student_free_trial_7_days'
+  | 'group_professional'
+  | 'group_professional_educational'
+  | 'group_collaborator'
+  | 'group_collaborator_educational'
+  | 'assistant'
+  | 'assistant-annual'
 
-export type StripeLookupKey =
-  | 'collaborator_monthly'
-  | 'collaborator_annual'
+export type RecurlyAddOnCode = 'assistant'
+
+export type StripeBaseLookupKey =
+  | 'standard_monthly'
+  | 'standard_annual'
   | 'professional_monthly'
   | 'professional_annual'
   | 'student_monthly'
   | 'student_annual'
+  | 'assistant_annual'
+  | 'assistant_monthly'
+  // TODO: change all group plans' lookup_keys to match the UK account after they have been added
+  | 'group_standard_enterprise'
+  | 'group_professional_enterprise'
+  | 'group_standard_educational'
+  | 'group_professional_educational'
+
+export type StripeLookupKeyVersion = 'jun2025'
+
+export type StripeLookupKey =
+  `${StripeBaseLookupKey}_${StripeLookupKeyVersion}_${StripeCurrencyCode}`

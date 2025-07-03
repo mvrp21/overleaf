@@ -11,24 +11,26 @@ import {
   highlightRanges,
 } from '@/features/source-editor/extensions/ranges'
 import { useEditorManagerContext } from '@/features/ide-react/context/editor-manager-context'
-import { useLayoutContext } from '@/shared/context/layout-context'
 import { EditorSelection } from '@codemirror/state'
-import MaterialIcon from '@/shared/components/material-icon'
 import { OFFSET_FOR_ENTRIES_ABOVE } from '../utils/position-items'
+import useReviewPanelLayout from '../hooks/use-review-panel-layout'
+import { EntryIndicator } from './review-panel-entry-indicator'
 
-export const ReviewPanelEntry: FC<{
-  position: number
-  op: AnyOperation
-  docId: string
-  top?: number
-  className?: string
-  selectLineOnFocus?: boolean
-  hoverRanges?: boolean
-  disabled?: boolean
-  onEnterEntryIndicator?: () => void
-  onLeaveEntryIndicator?: () => void
-  entryIndicator?: 'comment' | 'edit'
-}> = ({
+export const ReviewPanelEntry: FC<
+  React.PropsWithChildren<{
+    position: number
+    op: AnyOperation
+    docId: string
+    top?: number
+    className?: string
+    selectLineOnFocus?: boolean
+    hoverRanges?: boolean
+    disabled?: boolean
+    handleEnter?: () => void
+    handleLeave?: () => void
+    entryIndicator?: 'comment' | 'edit'
+  }>
+> = ({
   children,
   position,
   top,
@@ -38,8 +40,8 @@ export const ReviewPanelEntry: FC<{
   docId,
   hoverRanges = true,
   disabled,
-  onEnterEntryIndicator,
-  onLeaveEntryIndicator,
+  handleEnter,
+  handleLeave,
   entryIndicator,
 }) => {
   const state = useCodeMirrorStateContext()
@@ -48,17 +50,13 @@ export const ReviewPanelEntry: FC<{
   const [selected, setSelected] = useState(false)
   const [focused, setFocused] = useState(false)
   const [textareaFocused, setTextareaFocused] = useState(false)
-  const { setReviewPanelOpen } = useLayoutContext()
+  const { openReviewPanel } = useReviewPanelLayout()
   const highlighted = isSelectionWithinOp(op, state.selection.main)
   const entryRef = useRef<HTMLDivElement>(null)
   const mousePressedRef = useRef(false)
 
-  const openReviewPanel = useCallback(() => {
-    setReviewPanelOpen(true)
-  }, [setReviewPanelOpen])
-
   const selectEntry = useCallback(
-    event => {
+    (event: React.FocusEvent | React.MouseEvent) => {
       setFocused(true)
 
       if (event.target instanceof HTMLTextAreaElement) {
@@ -196,19 +194,12 @@ export const ReviewPanelEntry: FC<{
       }}
     >
       {entryIndicator && (
-        <div
-          className="review-panel-entry-indicator"
-          onMouseEnter={onEnterEntryIndicator}
-          onMouseLeave={onLeaveEntryIndicator}
-          onMouseDown={openReviewPanel} // Using onMouseDown rather than onClick to guarantee that it fires before onFocus
-          role="button"
-          tabIndex={0}
-        >
-          <MaterialIcon
-            type={entryIndicator}
-            className="review-panel-entry-icon"
-          />
-        </div>
+        <EntryIndicator
+          type={entryIndicator}
+          handleMouseEnter={handleEnter}
+          handleMouseLeave={handleLeave}
+          handleMouseDown={openReviewPanel}
+        />
       )}
       {children}
     </div>

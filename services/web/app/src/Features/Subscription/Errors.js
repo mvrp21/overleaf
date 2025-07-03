@@ -24,13 +24,23 @@ class InactiveError extends OError {}
 
 class SubtotalLimitExceededError extends OError {}
 
+class HasPastDueInvoiceError extends OError {}
+
+class PaymentActionRequiredError extends OError {
+  constructor(info) {
+    super('Payment action required', info)
+  }
+}
+
 module.exports = {
   RecurlyTransactionError,
   DuplicateAddOnError,
   AddOnNotPresentError,
+  PaymentActionRequiredError,
   MissingBillingInfoError,
   ManuallyCollectedError,
   PendingChangeError,
   InactiveError,
   SubtotalLimitExceededError,
+  HasPastDueInvoiceError,
 }

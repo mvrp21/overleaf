@@ -70,6 +70,7 @@ describe('SubscriptionUpdater', function () {
       .stub()
       .returns({ exec: sinon.stub().resolves() })
     this.SubscriptionModel.findOne = sinon.stub().resolves()
+    this.SubscriptionModel.findById = sinon.stub().resolves()
     this.SubscriptionModel.updateMany = sinon
       .stub()
       .returns({ exec: sinon.stub().resolves() })
@@ -120,6 +121,18 @@ describe('SubscriptionUpdater', function () {
           },
         },
       ],
+      mongo: {
+        options: {
+          appname: 'web',
+          maxPoolSize: 100,
+          serverSelectionTimeoutMS: 60000,
+          socketTimeoutMS: 60000,
+          monitorCommands: true,
+          family: 4,
+        },
+        url: 'mongodb://mongo/test-overleaf',
+        hasSecondaries: false,
+      },
     }
 
     this.UserFeaturesUpdater = {
@@ -161,6 +174,12 @@ describe('SubscriptionUpdater', function () {
       },
     }
 
+    this.UserUpdater = {
+      promises: {
+        updateUser: sinon.stub().resolves(),
+      },
+    }
+
     this.SubscriptionUpdater = SandboxedModule.require(modulePath, {
       requires: {
         '../../models/Subscription': {
@@ -181,6 +200,14 @@ describe('SubscriptionUpdater', function () {
         }),
         '../../infrastructure/Features': this.Features,
         '../User/UserAuditLogHandler': this.UserAuditLogHandler,
+        '../User/UserUpdater': this.UserUpdater,
+        '../../infrastructure/Modules': (this.Modules = {
+          promises: {
+            hooks: {
+              fire: sinon.stub().resolves(),
+            },
+          },
+        }),
       },
     })
   })
@@ -486,6 +513,7 @@ describe('SubscriptionUpdater', function () {
       this.SubscriptionModel.updateOne
         .calledWith(searchOps, insertOperation)
         .should.equal(true)
+      expect(this.SubscriptionModel.updateOne.lastCall.args[2].session).to.exist
       sinon.assert.calledWith(
         this.AnalyticsManager.recordEventForUserInBackground,
         this.otherUserId,
@@ -571,6 +599,24 @@ describe('SubscriptionUpdater', function () {
         }
       )
     })
+
+    it('should add an entry to the group audit log when joining a group', async function () {
+      await this.SubscriptionUpdater.promises.addUserToGroup(
+        this.subscription._id,
+        this.otherUserId,
+        { ipAddress: '0:0:0:0', initiatorId: 'user123' }
+      )
+
+      expect(this.Modules.promises.hooks.fire).to.have.been.calledWith(
+        'addGroupAuditLogEntry',
+        {
+          groupId: this.subscription._id,
+          initiatorId: 'user123',
+          ipAddress: '0:0:0:0',
+          operation: 'join-group',
+        }
+      )
+    })
   })
 
   describe('removeUserFromGroup', function () {
@@ -584,6 +630,9 @@ describe('SubscriptionUpdater', function () {
         },
       ]
       this.SubscriptionModel.findOne.resolves(this.groupSubscription)
+      this.SubscriptionModel.findById = sinon
+        .stub()
+        .resolves(this.groupSubscription)
       this.SubscriptionLocator.promises.getMemberSubscriptions.resolves(
         this.fakeSubscriptions
       )
@@ -597,6 +646,28 @@ describe('SubscriptionUpdater', function () {
       const removeOperation = { $pull: { member_ids: this.otherUserId } }
       this.SubscriptionModel.updateOne
         .calledWith({ _id: this.subscription._id }, removeOperation)
+        .should.equal(true)
+    })
+
+    it('should remove user enrollment if the group is managed', async function () {
+      this.SubscriptionModel.findById.resolves({
+        ...this.groupSubscription,
+        managedUsersEnabled: true,
+      })
+      await this.SubscriptionUpdater.promises.removeUserFromGroup(
+        this.groupSubscription._id,
+        this.otherUserId
+      )
+      this.UserUpdater.promises.updateUser
+        .calledWith(
+          { _id: this.otherUserId },
+          {
+            $unset: {
+              'enrollment.managedBy': 1,
+              'enrollment.enrolledAt': 1,
+            },
+          }
+        )
         .should.equal(true)
     })
 
@@ -799,6 +870,40 @@ describe('SubscriptionUpdater', function () {
           this.FeaturesUpdater.promises.scheduleRefreshFeatures
         ).to.have.been.calledWith(userId)
       }
+    })
+  })
+
+  describe('scheduleRefreshFeatures', function () {
+    it('should call upgrades feature for personal subscription from admin_id', async function () {
+      this.subscription = {
+        _id: new ObjectId().toString(),
+        mock: 'subscription',
+        admin_id: new ObjectId(),
+      }
+
+      await this.SubscriptionUpdater.promises.scheduleRefreshFeatures(
+        this.subscription
+      )
+
+      expect(
+        this.FeaturesUpdater.promises.scheduleRefreshFeatures
+      ).to.have.been.calledOnceWith(this.subscription.admin_id)
+    })
+
+    it('should call upgrades feature for group subscription from admin_id and member_ids', async function () {
+      this.subscription = {
+        _id: new ObjectId().toString(),
+        mock: 'subscription',
+        admin_id: new ObjectId(),
+        member_ids: [new ObjectId(), new ObjectId(), new ObjectId()],
+      }
+      await this.SubscriptionUpdater.promises.scheduleRefreshFeatures(
+        this.subscription
+      )
+
+      expect(
+        this.FeaturesUpdater.promises.scheduleRefreshFeatures.callCount
+      ).to.equal(4)
     })
   })
 })

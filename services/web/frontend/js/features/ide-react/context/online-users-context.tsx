@@ -18,7 +18,7 @@ import useSocketListener from '@/features/ide-react/hooks/use-socket-listener'
 import { debugConsole } from '@/utils/debugging'
 import { IdeEvents } from '@/features/ide-react/create-ide-event-emitter'
 import { getHueForUserId } from '@/shared/utils/colors'
-import { useEditorManagerContext } from '@/features/ide-react/context/editor-manager-context'
+import { useEditorOpenDocContext } from '@/features/ide-react/context/editor-open-doc-context'
 
 export type OnlineUser = {
   id: string
@@ -65,10 +65,12 @@ export const OnlineUsersContext = createContext<
   OnlineUsersContextValue | undefined
 >(undefined)
 
-export const OnlineUsersProvider: FC = ({ children }) => {
+export const OnlineUsersProvider: FC<React.PropsWithChildren> = ({
+  children,
+}) => {
   const { eventEmitter } = useIdeReactContext()
   const { socket } = useConnectionContext()
-  const { currentDocumentId } = useEditorManagerContext()
+  const { currentDocumentId } = useEditorOpenDocContext()
   const { fileTreeData } = useFileTreeData()
 
   const [onlineUsers, setOnlineUsers] = useState<Record<string, OnlineUser>>({})
@@ -93,7 +95,7 @@ export const OnlineUsersProvider: FC = ({ children }) => {
       for (const [clientId, user] of Object.entries(onlineUsers)) {
         const decoratedUser = { ...user }
         const docId = user.doc_id
-        if (docId) {
+        if (docId && fileTreeData) {
           decoratedUser.doc = findDocEntityById(fileTreeData, docId)
         }
 

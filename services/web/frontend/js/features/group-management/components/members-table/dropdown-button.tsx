@@ -1,12 +1,10 @@
 import {
-  useState,
   type ComponentProps,
   useCallback,
   type Dispatch,
   type SetStateAction,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Dropdown as BS3Dropdown, MenuItem } from 'react-bootstrap'
 import {
   Dropdown,
   DropdownItem,
@@ -16,14 +14,13 @@ import {
 import { User } from '../../../../../../types/group-management/user'
 import useAsync from '@/shared/hooks/use-async'
 import { type FetchError, postJSON } from '@/infrastructure/fetch-json'
-import Icon from '@/shared/components/icon'
 import { GroupUserAlert } from '../../utils/types'
 import { useGroupMembersContext } from '../../context/group-members-context'
 import getMeta from '@/utils/meta'
-import BootstrapVersionSwitcher from '@/features/ui/components/bootstrap-5/bootstrap-version-switcher'
 import MaterialIcon from '@/shared/components/material-icon'
 import DropdownListItem from '@/features/ui/components/bootstrap-5/dropdown-list-item'
-import { Spinner } from 'react-bootstrap-5'
+import { Spinner } from 'react-bootstrap'
+import { sendMB } from '@/infrastructure/event-tracking'
 
 type resendInviteResponse = {
   success: boolean
@@ -32,6 +29,7 @@ type resendInviteResponse = {
 type ManagedUserDropdownButtonProps = {
   user: User
   openOffboardingModalForUser: (user: User) => void
+  openRemoveModalForUser: (user: User) => void
   openUnlinkUserModal: (user: User) => void
   groupId: string
   setGroupUserAlert: Dispatch<SetStateAction<GroupUserAlert>>
@@ -40,13 +38,13 @@ type ManagedUserDropdownButtonProps = {
 export default function DropdownButton({
   user,
   openOffboardingModalForUser,
+  openRemoveModalForUser,
   openUnlinkUserModal,
   groupId,
   setGroupUserAlert,
 }: ManagedUserDropdownButtonProps) {
   const { t } = useTranslation()
   const { removeMember } = useGroupMembersContext()
-  const [isOpened, setIsOpened] = useState(false)
   const {
     runAsync: runResendManagedUserInviteAsync,
     isLoading: isResendingManagedUserInvite,
@@ -62,14 +60,15 @@ export default function DropdownButton({
 
   const managedUsersActive = getMeta('ol-managedUsersActive')
   const groupSSOActive = getMeta('ol-groupSSOActive')
-
+  const userId = getMeta('ol-user_id')
+  const isUserGroupManager = getMeta('ol-isUserGroupManager')
   const userPending = user.invite
   const isGroupSSOLinked =
     !userPending && user.enrollment?.sso?.some(sso => sso.groupId === groupId)
   const isUserManaged = !userPending && user.enrollment?.managedBy === groupId
 
   const handleResendManagedUserInvite = useCallback(
-    async user => {
+    async (user: User) => {
       try {
         const result = await runResendManagedUserInviteAsync(
           postJSON(
@@ -82,7 +81,6 @@ export default function DropdownButton({
             variant: 'resendManagedUserInviteSuccess',
             email: user.email,
           })
-          setIsOpened(false)
         }
       } catch (err) {
         if ((err as FetchError)?.response?.status === 429) {
@@ -96,15 +94,13 @@ export default function DropdownButton({
             email: user.email,
           })
         }
-
-        setIsOpened(false)
       }
     },
     [setGroupUserAlert, groupId, runResendManagedUserInviteAsync]
   )
 
   const handleResendLinkSSOInviteAsync = useCallback(
-    async user => {
+    async (user: User) => {
       try {
         const result = await runResendLinkSSOInviteAsync(
           postJSON(`/manage/groups/${groupId}/resendSSOLinkInvite/${user._id}`)
@@ -115,7 +111,6 @@ export default function DropdownButton({
             variant: 'resendSSOLinkInviteSuccess',
             email: user.email,
           })
-          setIsOpened(false)
         }
       } catch (err) {
         if ((err as FetchError)?.response?.status === 429) {
@@ -129,15 +124,13 @@ export default function DropdownButton({
             email: user.email,
           })
         }
-
-        setIsOpened(false)
       }
     },
     [setGroupUserAlert, groupId, runResendLinkSSOInviteAsync]
   )
 
   const handleResendGroupInvite = useCallback(
-    async user => {
+    async (user: User) => {
       try {
         await runResendGroupInviteAsync(
           postJSON(`/manage/groups/${groupId}/resendInvite/`, {
@@ -151,7 +144,6 @@ export default function DropdownButton({
           variant: 'resendGroupInviteSuccess',
           email: user.email,
         })
-        setIsOpened(false)
       } catch (err) {
         if ((err as FetchError)?.response?.status === 429) {
           setGroupUserAlert({
@@ -164,8 +156,6 @@ export default function DropdownButton({
             email: user.email,
           })
         }
-
-        setIsOpened(false)
       }
     },
     [setGroupUserAlert, groupId, runResendGroupInviteAsync]
@@ -183,7 +173,13 @@ export default function DropdownButton({
   }
 
   const onDeleteUserClick = () => {
+    sendMB('delete-managed-user-selected')
     openOffboardingModalForUser(user)
+  }
+
+  const onReleaseUserClick = () => {
+    sendMB('remove-managed-user-selected')
+    openRemoveModalForUser(user)
   }
 
   const onRemoveFromGroup = () => {
@@ -243,15 +239,27 @@ export default function DropdownButton({
       </MenuItemButton>
     )
   }
-  if (isUserManaged && !user.isEntityAdmin) {
+  if (
+    isUserManaged &&
+    !user.isEntityAdmin &&
+    (!isUserGroupManager || userId !== user._id)
+  ) {
     buttons.push(
       <MenuItemButton
-        className="delete-user-action"
         key="delete-user-action"
         data-testid="delete-user-action"
         onClick={onDeleteUserClick}
       >
         {t('delete_user')}
+      </MenuItemButton>
+    )
+    buttons.push(
+      <MenuItemButton
+        key="release-user-action"
+        data-testid="release-user-action"
+        onClick={onReleaseUserClick}
+      >
+        {t('remove_user')}
       </MenuItemButton>
     )
   } else if (!isUserManaged) {
@@ -260,7 +268,6 @@ export default function DropdownButton({
         key="remove-user-action"
         data-testid="remove-user-action"
         onClick={onRemoveFromGroup}
-        className="delete-user-action"
         variant="danger"
       >
         {t('remove_from_group')}
@@ -270,65 +277,29 @@ export default function DropdownButton({
 
   if (buttons.length === 0) {
     buttons.push(
-      <BootstrapVersionSwitcher
-        bs3={
-          <MenuItem
-            key="no-actions-available"
-            data-testid="no-actions-available"
-          >
-            <span className="text-muted">{t('no_actions')}</span>
-          </MenuItem>
-        }
-        bs5={
-          <DropdownListItem>
-            <DropdownItem
-              as="button"
-              tabIndex={-1}
-              data-testid="no-actions-available"
-              disabled
-            >
-              {t('no_actions')}
-            </DropdownItem>
-          </DropdownListItem>
-        }
-      />
+      <DropdownListItem key="no-actions-available">
+        <DropdownItem
+          as="button"
+          tabIndex={-1}
+          data-testid="no-actions-available"
+          disabled
+        >
+          {t('no_actions')}
+        </DropdownItem>
+      </DropdownListItem>
     )
   }
 
   return (
-    <BootstrapVersionSwitcher
-      bs3={
-        <div className="managed-user-actions">
-          <BS3Dropdown
-            id={`managed-user-dropdown-${user.email}`}
-            open={isOpened}
-            onToggle={open => setIsOpened(open)}
-          >
-            <BS3Dropdown.Toggle
-              bsStyle={null}
-              className="btn btn-link action-btn"
-              noCaret
-            >
-              <Icon type="ellipsis-v" accessibilityLabel={t('actions')} />
-            </BS3Dropdown.Toggle>
-            <BS3Dropdown.Menu className="dropdown-menu-right managed-user-dropdown-menu">
-              {buttons}
-            </BS3Dropdown.Menu>
-          </BS3Dropdown>
-        </div>
-      }
-      bs5={
-        <Dropdown align="end">
-          <DropdownToggle
-            id={`managed-user-dropdown-${user.email}`}
-            bsPrefix="dropdown-table-button-toggle"
-          >
-            <MaterialIcon type="more_vert" accessibilityLabel={t('actions')} />
-          </DropdownToggle>
-          <DropdownMenu flip={false}>{buttons}</DropdownMenu>
-        </Dropdown>
-      }
-    />
+    <Dropdown align="end">
+      <DropdownToggle
+        id={`managed-user-dropdown-${user.email}`}
+        bsPrefix="dropdown-table-button-toggle"
+      >
+        <MaterialIcon type="more_vert" accessibilityLabel={t('actions')} />
+      </DropdownToggle>
+      <DropdownMenu flip={false}>{buttons}</DropdownMenu>
+    </Dropdown>
   )
 }
 
@@ -341,48 +312,31 @@ type MenuItemButtonProps = {
 function MenuItemButton({
   children,
   onClick,
-  className,
   isLoading,
   variant,
   'data-testid': dataTestId,
 }: MenuItemButtonProps) {
   return (
-    <BootstrapVersionSwitcher
-      bs3={
-        <li role="presentation" className={className}>
-          <button
-            className="managed-user-menu-item-button"
-            role="menuitem"
-            onClick={onClick}
-            data-testid={dataTestId}
-          >
-            {children}
-          </button>
-        </li>
-      }
-      bs5={
-        <DropdownListItem>
-          <DropdownItem
-            as="button"
-            tabIndex={-1}
-            onClick={onClick}
-            leadingIcon={
-              isLoading ? (
-                <Spinner
-                  animation="border"
-                  aria-hidden="true"
-                  size="sm"
-                  role="status"
-                />
-              ) : null
-            }
-            data-testid={dataTestId}
-            variant={variant}
-          >
-            {children}
-          </DropdownItem>
-        </DropdownListItem>
-      }
-    />
+    <DropdownListItem>
+      <DropdownItem
+        as="button"
+        tabIndex={-1}
+        onClick={onClick}
+        leadingIcon={
+          isLoading ? (
+            <Spinner
+              animation="border"
+              aria-hidden="true"
+              size="sm"
+              role="status"
+            />
+          ) : null
+        }
+        data-testid={dataTestId}
+        variant={variant}
+      >
+        {children}
+      </DropdownItem>
+    </DropdownListItem>
   )
 }

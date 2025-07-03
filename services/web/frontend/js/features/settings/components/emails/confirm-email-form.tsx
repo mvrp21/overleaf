@@ -2,13 +2,14 @@ import { postJSON } from '@/infrastructure/fetch-json'
 import useWaitForI18n from '@/shared/hooks/use-wait-for-i18n'
 import Notification from '@/shared/components/notification'
 import getMeta from '@/utils/meta'
-import { FormEvent, MouseEventHandler, useState } from 'react'
+import { FormEvent, MouseEventHandler, ReactNode, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import LoadingSpinner from '@/shared/components/loading-spinner'
 import MaterialIcon from '@/shared/components/material-icon'
 import { sendMB } from '@/infrastructure/event-tracking'
 import OLFormLabel from '@/features/ui/components/ol/ol-form-label'
 import OLButton from '@/features/ui/components/ol/ol-button'
+import { useLocation } from '@/shared/hooks/use-location'
 
 type Feedback = {
   type: 'input' | 'alert'
@@ -27,6 +28,7 @@ type ConfirmEmailFormProps = {
   interstitial: boolean
   isModal?: boolean
   onCancel?: () => void
+  outerError?: string
 }
 
 export function ConfirmEmailForm({
@@ -40,15 +42,17 @@ export function ConfirmEmailForm({
   interstitial,
   isModal,
   onCancel,
+  outerError,
 }: ConfirmEmailFormProps) {
   const { t } = useTranslation()
   const [confirmationCode, setConfirmationCode] = useState('')
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [isConfirming, setIsConfirming] = useState(false)
   const [isResending, setIsResending] = useState(false)
+  const [hasResent, setHasResent] = useState(false)
   const [successRedirectPath, setSuccessRedirectPath] = useState('')
   const { isReady } = useWaitForI18n()
-
+  const outerErrorDisplay = (!hasResent && outerError) || null
   const errorHandler = (err: any, actionType?: string) => {
     let errorName = err?.data?.message?.key || 'generic_something_went_wrong'
 
@@ -131,6 +135,7 @@ export function ConfirmEmailForm({
       })
       .finally(() => {
         setIsResending(false)
+        setHasResent(true)
       })
 
     sendMB('email-verification-click', {
@@ -158,8 +163,15 @@ export function ConfirmEmailForm({
     )
   }
 
-  let intro = <h5 className="h5">{t('confirm_your_email')}</h5>
-  if (isModal) intro = <h5 className="h5">{t('we_sent_code')}</h5>
+  let intro: ReactNode | null = (
+    <h5 className="h5">{t('confirm_your_email')}</h5>
+  )
+  if (isModal)
+    intro = outerErrorDisplay ? (
+      <div className="mt-4" />
+    ) : (
+      <h3 className="h5">{outerErrorDisplay ? null : t('we_sent_code')}</h3>
+    )
   if (interstitial)
     intro = (
       <h1 className="h3 interstitial-header">{t('confirm_your_email')}</h1>
@@ -170,14 +182,17 @@ export function ConfirmEmailForm({
       onSubmit={submitHandler}
       onInvalid={invalidFormHandler}
       className="confirm-email-form"
+      data-testid="confirm-email-form"
     >
       <div className="confirm-email-form-inner">
-        {feedback?.type === 'alert' && (
+        {(feedback?.type === 'alert' || outerErrorDisplay) && (
           <Notification
             ariaLive="polite"
             className="confirm-email-alert"
-            type={feedback.style}
-            content={<ErrorMessage error={feedback.message} />}
+            type={outerErrorDisplay ? 'error' : feedback!.style}
+            content={
+              outerErrorDisplay || <ErrorMessage error={feedback!.message!} />
+            }
           />
         )}
 
@@ -191,7 +206,6 @@ export function ConfirmEmailForm({
         <input
           id="one-time-code"
           className="form-control"
-          placeholder={t('enter_6_digit_code')}
           inputMode="numeric"
           required
           value={confirmationCode}
@@ -200,6 +214,7 @@ export function ConfirmEmailForm({
           maxLength={6}
           autoComplete="one-time-code"
           autoFocus // eslint-disable-line jsx-a11y/no-autofocus
+          disabled={!!outerErrorDisplay}
         />
         <div aria-live="polite">
           {feedback?.type === 'input' && (
@@ -214,7 +229,7 @@ export function ConfirmEmailForm({
 
         <div className="form-actions">
           <OLButton
-            disabled={isResending}
+            disabled={isResending || !!outerErrorDisplay}
             type="submit"
             isLoading={isConfirming}
             loadingLabel={t('confirming')}
@@ -254,6 +269,7 @@ function ConfirmEmailSuccessfullForm({
   successButtonText: string
   redirectTo: string
 }) {
+  const location = useLocation()
   const submitHandler = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     location.assign(redirectTo)

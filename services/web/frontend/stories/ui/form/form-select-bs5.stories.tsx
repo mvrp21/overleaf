@@ -1,14 +1,11 @@
-import { Form, FormSelectProps } from 'react-bootstrap-5'
+import { Form, FormSelectProps } from 'react-bootstrap'
 import type { Meta, StoryObj } from '@storybook/react'
 import FormGroup from '@/features/ui/components/bootstrap-5/form/form-group'
 import FormText from '@/features/ui/components/bootstrap-5/form/form-text'
 
 const meta: Meta<FormSelectProps> = {
-  title: 'Shared / Components / Bootstrap 5 / Form / Select',
+  title: 'Shared / Components / Form / Select',
   component: Form.Select,
-  parameters: {
-    bootstrap5: true,
-  },
 }
 export default meta
 

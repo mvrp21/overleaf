@@ -4,6 +4,7 @@ import OError from '@overleaf/o-error'
 import TeamInvitesHandler from './TeamInvitesHandler.js'
 import SessionManager from '../Authentication/SessionManager.js'
 import SubscriptionLocator from './SubscriptionLocator.js'
+import SubscriptionHelper from './SubscriptionHelper.js'
 import ErrorController from '../Errors/ErrorController.js'
 import EmailHelper from '../Helpers/EmailHelper.js'
 import UserGetter from '../User/UserGetter.js'
@@ -14,6 +15,7 @@ import EmailHandler from '../Email/EmailHandler.js'
 import { RateLimiter } from '../../infrastructure/RateLimiter.js'
 import Modules from '../../infrastructure/Modules.js'
 import UserAuditLogHandler from '../User/UserAuditLogHandler.js'
+import { sanitizeSessionUserForFrontEnd } from '../../infrastructure/FrontEndUser.js'
 
 const rateLimiters = {
   resendGroupInvite: new RateLimiter('resend-group-invite', {
@@ -36,10 +38,15 @@ async function createInvite(req, res, next) {
   }
 
   try {
+    const auditLog = {
+      initiatorId: teamManagerId,
+      ipAddress: req.ip,
+    }
     const invitedUserData = await TeamInvitesHandler.promises.createInvite(
       teamManagerId,
       subscription,
-      email
+      email,
+      auditLog
     )
     return res.json({ user: invitedUserData })
   } catch (err) {
@@ -82,12 +89,10 @@ async function viewInvite(req, res, next) {
     const personalSubscription =
       await SubscriptionLocator.promises.getUsersSubscription(userId)
 
-    const hasIndividualRecurlySubscription =
-      personalSubscription &&
-      personalSubscription.groupPlan === false &&
-      personalSubscription.recurlyStatus?.state !== 'canceled' &&
-      personalSubscription.recurlySubscription_id &&
-      personalSubscription.recurlySubscription_id !== ''
+    const hasIndividualPaidSubscription =
+      SubscriptionHelper.isIndividualActivePaidSubscription(
+        personalSubscription
+      )
 
     if (subscription?.managedUsersEnabled) {
       if (!subscription.populated('groupPolicy')) {
@@ -128,6 +133,9 @@ async function viewInvite(req, res, next) {
         logger.error({ err }, 'error getting subscription admin email')
       }
 
+      const usersSubscription =
+        await SubscriptionLocator.promises.getUserSubscriptionStatus(userId)
+
       return res.render('subscriptions/team/invite-managed', {
         inviterName: invite.inviterName,
         inviteToken: invite.token,
@@ -136,7 +144,8 @@ async function viewInvite(req, res, next) {
         currentManagedUserAdminEmail,
         groupSSOActive,
         subscriptionId: subscription._id.toString(),
-        user: sessionUser,
+        user: sanitizeSessionUserForFrontEnd(sessionUser),
+        usersSubscription,
       })
     } else {
       let currentManagedUserAdminEmail
@@ -150,13 +159,13 @@ async function viewInvite(req, res, next) {
       return res.render('subscriptions/team/invite', {
         inviterName: invite.inviterName,
         inviteToken: invite.token,
-        hasIndividualRecurlySubscription,
+        hasIndividualPaidSubscription,
         expired: req.query.expired,
         userRestrictions: Array.from(req.userRestrictions || []),
         currentManagedUserAdminEmail,
         groupSSOActive,
         subscriptionId: subscription._id.toString(),
-        user: sessionUser,
+        user: sanitizeSessionUserForFrontEnd(sessionUser),
       })
     }
   } else {
@@ -197,7 +206,8 @@ async function acceptInvite(req, res, next) {
 
   const subscription = await TeamInvitesHandler.promises.acceptInvite(
     token,
-    userId
+    userId,
+    req.ip
   )
   const groupSSOActive = (
     await Modules.promises.hooks.fire('hasGroupSSOEnabled', subscription)

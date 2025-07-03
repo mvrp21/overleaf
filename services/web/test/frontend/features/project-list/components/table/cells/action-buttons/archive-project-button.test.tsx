@@ -31,7 +31,7 @@ describe('<ArchiveProjectButton />', function () {
     )
     const btn = screen.getByRole('button', { name: 'Archive' })
     fireEvent.click(btn)
-    screen.getByText('Archive Projects')
+    screen.getByText('Archive projects')
     screen.getByText(archiveableProject.name)
   })
 
@@ -56,7 +56,7 @@ describe('<ArchiveProjectButton />', function () {
     )
     const btn = screen.getByRole('button', { name: 'Archive' })
     fireEvent.click(btn)
-    screen.getByText('Archive Projects')
+    screen.getByText('Archive projects')
     screen.getByText('You are about to archive the following projects:')
     screen.getByText('Archiving projects won’t affect your collaborators.')
     const confirmBtn = screen.getByRole('button', {
@@ -67,8 +67,11 @@ describe('<ArchiveProjectButton />', function () {
 
     await waitFor(
       () =>
-        expect(archiveProjectMock.called(`/project/${project.id}/archive`)).to
-          .be.true
+        expect(
+          archiveProjectMock.callHistory.called(
+            `/project/${project.id}/archive`
+          )
+        ).to.be.true
     )
   })
 })

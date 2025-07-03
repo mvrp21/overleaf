@@ -18,6 +18,12 @@ const OError = require('@overleaf/o-error')
 const ProjectGetter = require('../Project/ProjectGetter')
 const ProjectEntityHandler = require('../Project/ProjectEntityHandler')
 
+async function getCommentThreadIds(projectId) {
+  await DocumentUpdaterHandler.promises.flushProjectToMongo(projectId)
+  const raw = await DocstoreManager.promises.getCommentThreadIds(projectId)
+  return new Map(Object.entries(raw).map(([doc, ids]) => [doc, new Set(ids)]))
+}
+
 const RestoreManager = {
   async restoreFileFromV2(userId, projectId, version, pathname) {
     const fsPath = await RestoreManager._writeFileVersionToDisk(
@@ -33,7 +39,8 @@ const RestoreManager = {
     }
     const parentFolderId = await RestoreManager._findOrCreateFolder(
       projectId,
-      dirname
+      dirname,
+      userId
     )
     const addEntityWithName = async name =>
       await FileSystemImportManager.promises.addEntity(
@@ -51,6 +58,25 @@ const RestoreManager = {
   },
 
   async revertFile(userId, projectId, version, pathname, options = {}) {
+    const threadIds = await getCommentThreadIds(projectId)
+    return await RestoreManager._revertSingleFile(
+      userId,
+      projectId,
+      version,
+      pathname,
+      threadIds,
+      options
+    )
+  },
+
+  async _revertSingleFile(
+    userId,
+    projectId,
+    version,
+    pathname,
+    threadIds,
+    options = {}
+  ) {
     const project = await ProjectGetter.promises.getProject(projectId, {
       overleaf: true,
     })
@@ -71,7 +97,8 @@ const RestoreManager = {
     }
     const parentFolderId = await RestoreManager._findOrCreateFolder(
       projectId,
-      dirname
+      dirname,
+      userId
     )
     const file = await ProjectLocator.promises
       .findElementByPath({
@@ -113,6 +140,7 @@ const RestoreManager = {
         origin,
         userId
       )
+      threadIds.delete(file.element._id.toString())
     }
 
     const { metadata } = await RestoreManager._getMetadataFromHistory(
@@ -152,22 +180,12 @@ const RestoreManager = {
     const documentCommentIds = new Set(
       ranges.comments?.map(({ op: { t } }) => t)
     )
-
-    await DocumentUpdaterHandler.promises.flushProjectToMongo(projectId)
-
-    const docsWithRanges =
-      await DocstoreManager.promises.getAllRanges(projectId)
-
-    const nonOrphanedThreadIds = new Set()
-    for (const { ranges } of docsWithRanges) {
-      for (const comment of ranges.comments ?? []) {
-        nonOrphanedThreadIds.add(comment.op.t)
+    const commentIdsToDuplicate = Array.from(documentCommentIds).filter(id => {
+      for (const ids of threadIds.values()) {
+        if (ids.has(id)) return true
       }
-    }
-
-    const commentIdsToDuplicate = Array.from(documentCommentIds).filter(id =>
-      nonOrphanedThreadIds.has(id)
-    )
+      return false
+    })
 
     const newRanges = { changes: ranges.changes, comments: [] }
 
@@ -189,6 +207,7 @@ const RestoreManager = {
             continue
           }
           // We have a new id for this comment thread
+          comment.id = result.duplicateId
           comment.op.t = result.duplicateId
         }
         newRanges.comments.push(comment)
@@ -229,8 +248,6 @@ const RestoreManager = {
         delete threadData.resolved_by_user_id
         delete threadData.resolved_at
       }
-      // remove the resolved property from the comment range as the chat service is synced at this point
-      delete commentRange.op.resolved
     }
 
     await ChatManager.promises.injectUserInfoIntoThreads(newCommentThreadData)
@@ -257,6 +274,11 @@ const RestoreManager = {
       origin,
       userId
     )
+    // For revertProject: The next doc that gets reverted will need to duplicate all the threads seen here.
+    threadIds.set(
+      _id.toString(),
+      new Set(newRanges.comments.map(({ op: { t } }) => t))
+    )
 
     return {
       _id,
@@ -264,10 +286,11 @@ const RestoreManager = {
     }
   },
 
-  async _findOrCreateFolder(projectId, dirname) {
+  async _findOrCreateFolder(projectId, dirname, userId) {
     const { lastFolder } = await EditorController.promises.mkdirp(
       projectId,
-      dirname
+      dirname,
+      userId
     )
     return lastFolder?._id
   },
@@ -318,11 +341,17 @@ const RestoreManager = {
       version,
       timestamp: new Date(updateAtVersion.meta.end_ts).toISOString(),
     }
+    const threadIds = await getCommentThreadIds(projectId)
 
     for (const pathname of pathsAtPastVersion) {
-      await RestoreManager.revertFile(userId, projectId, version, pathname, {
-        origin,
-      })
+      await RestoreManager._revertSingleFile(
+        userId,
+        projectId,
+        version,
+        pathname,
+        threadIds,
+        { origin }
+      )
     }
 
     const entitiesAtLiveVersion =

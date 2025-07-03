@@ -78,9 +78,12 @@ const ShareProjectModal = React.memo(function ShareProjectModal({
         return false
       }
       return (
-        project.members.filter(member => member.privileges === 'readAndWrite')
-          .length > (project.features.collaborators ?? 1) ||
-        project.members.some(member => member.pendingEditor)
+        project.members.filter(member =>
+          ['readAndWrite', 'review'].includes(member.privileges)
+        ).length > (project.features.collaborators ?? 1) ||
+        project.members.some(
+          member => member.pendingEditor || member.pendingReviewer
+        )
       )
     }
 
@@ -123,7 +126,7 @@ const ShareProjectModal = React.memo(function ShareProjectModal({
   }, [handleHide, inFlight])
 
   // update `error` and `inFlight` while sending a request
-  const monitorRequest = useCallback(request => {
+  const monitorRequest = useCallback((request: () => any) => {
     setError(undefined)
     setInFlight(true)
 
@@ -146,7 +149,7 @@ const ShareProjectModal = React.memo(function ShareProjectModal({
 
   // merge the new data with the old project data
   const updateProject = useCallback(
-    data => Object.assign(project, data),
+    (data: ProjectContextUpdateValue) => Object.assign(project, data),
     [project]
   )
 

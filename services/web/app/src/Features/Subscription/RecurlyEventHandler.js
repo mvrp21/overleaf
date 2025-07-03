@@ -1,7 +1,7 @@
 const SplitTestHandler = require('../SplitTests/SplitTestHandler')
 const AnalyticsManager = require('../Analytics/AnalyticsManager')
 const SubscriptionEmailHandler = require('./SubscriptionEmailHandler')
-const { AI_ADD_ON_CODE } = require('./RecurlyEntities')
+const { AI_ADD_ON_CODE } = require('./PaymentProviderEntities')
 const { ObjectId } = require('mongodb-legacy')
 
 const INVOICE_SUBSCRIPTION_LIMIT = 10
@@ -11,6 +11,16 @@ async function sendRecurlyAnalyticsEvent(event, eventData) {
   if (!ObjectId.isValid(userId)) {
     return
   }
+
+  const customerIoEnabled =
+    await SplitTestHandler.promises.hasUserBeenAssignedToVariant(
+      {},
+      userId,
+      'customer-io-trial-conversion',
+      'enabled',
+      true
+    )
+  eventData['customerio-integration'] = customerIoEnabled || false
 
   switch (event) {
     case 'new_subscription_notification':
@@ -66,6 +76,8 @@ async function _sendSubscriptionResumedEvent(userId, eventData) {
     {
       plan_code: planCode,
       subscriptionId,
+      payment_provider: 'recurly',
+      'customerio-integration': eventData['customerio-integration'],
     }
   )
   AnalyticsManager.setUserPropertyForUserInBackground(
@@ -87,6 +99,8 @@ async function _sendSubscriptionPausedEvent(userId, eventData) {
       pause_length: pauseLength,
       plan_code: planCode,
       subscriptionId,
+      payment_provider: 'recurly',
+      'customerio-integration': eventData['customerio-integration'],
     }
   )
   AnalyticsManager.setUserPropertyForUserInBackground(
@@ -108,6 +122,8 @@ async function _sendSubscriptionStartedEvent(userId, eventData) {
       is_trial: isTrial,
       has_ai_add_on: hasAiAddOn,
       subscriptionId,
+      payment_provider: 'recurly',
+      'customerio-integration': eventData['customerio-integration'],
     }
   )
   AnalyticsManager.setUserPropertyForUserInBackground(
@@ -154,6 +170,8 @@ async function _sendSubscriptionUpdatedEvent(userId, eventData) {
       is_trial: isTrial,
       has_ai_add_on: hasAiAddOn,
       subscriptionId,
+      payment_provider: 'recurly',
+      'customerio-integration': eventData['customerio-integration'],
     }
   )
   AnalyticsManager.setUserPropertyForUserInBackground(
@@ -185,6 +203,8 @@ async function _sendSubscriptionCancelledEvent(userId, eventData) {
       is_trial: isTrial,
       has_ai_add_on: hasAiAddOn,
       subscriptionId,
+      payment_provider: 'recurly',
+      'customerio-integration': eventData['customerio-integration'],
     }
   )
   AnalyticsManager.setUserPropertyForUserInBackground(
@@ -211,6 +231,8 @@ async function _sendSubscriptionExpiredEvent(userId, eventData) {
       is_trial: isTrial,
       has_ai_add_on: hasAiAddOn,
       subscriptionId,
+      payment_provider: 'recurly',
+      'customerio-integration': eventData['customerio-integration'],
     }
   )
   AnalyticsManager.setUserPropertyForUserInBackground(
@@ -242,6 +264,8 @@ async function _sendSubscriptionRenewedEvent(userId, eventData) {
       is_trial: isTrial,
       has_ai_add_on: hasAiAddOn,
       subscriptionId,
+      payment_provider: 'recurly',
+      'customerio-integration': eventData['customerio-integration'],
     }
   )
   AnalyticsManager.setUserPropertyForUserInBackground(
@@ -272,6 +296,8 @@ async function _sendSubscriptionReactivatedEvent(userId, eventData) {
       quantity,
       has_ai_add_on: hasAiAddOn,
       subscriptionId,
+      payment_provider: 'recurly',
+      'customerio-integration': eventData['customerio-integration'],
     }
   )
   AnalyticsManager.setUserPropertyForUserInBackground(
@@ -318,6 +344,7 @@ async function _sendInvoicePaidEvent(userId, eventData) {
       taxInCents,
       country,
       collectionMethod,
+      payment_provider: 'recurly',
       ...subscriptionIds,
     }
   )

@@ -1,6 +1,6 @@
 const config = require('config')
 
-const { knex, persistor, mongodb } = require('../../../../../storage')
+const { knex, persistor, mongodb, redis } = require('../../../../../storage')
 const { S3Persistor } = require('@overleaf/object-persistor/src/S3Persistor')
 
 const POSTGRES_TABLES = [
@@ -17,7 +17,6 @@ const MONGO_COLLECTIONS = [
   'projectHistoryChunks',
 
   // back_fill_file_hash.test.mjs
-  'deletedFiles',
   'deletedProjects',
   'projects',
   'projectHistoryBackedUpBlobs',
@@ -43,6 +42,11 @@ async function cleanupMongo() {
   }
 }
 
+async function cleanupRedis() {
+  await redis.rclientHistory.flushdb()
+  await redis.rclientLock.flushdb()
+}
+
 async function cleanupPersistor() {
   await Promise.all([
     clearBucket(config.get('blobStore.globalBucket')),
@@ -59,6 +63,10 @@ async function clearBucket(name) {
 let s3PersistorForBackupCleanup
 
 async function cleanupBackup() {
+  if (!config.has('backupStore')) {
+    return
+  }
+
   // The backupPersistor refuses to delete short prefixes. Use a low-level S3 persistor.
   if (!s3PersistorForBackupCleanup) {
     const { backupPersistor } = await import(
@@ -82,6 +90,7 @@ async function cleanupEverything() {
     cleanupMongo(),
     cleanupPersistor(),
     cleanupBackup(),
+    cleanupRedis(),
   ])
 }
 
@@ -90,5 +99,6 @@ module.exports = {
   mongo: cleanupMongo,
   persistor: cleanupPersistor,
   backup: cleanupBackup,
+  redis: cleanupRedis,
   everything: cleanupEverything,
 }

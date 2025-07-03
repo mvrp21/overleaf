@@ -249,6 +249,9 @@ app.get('/health_check', function (req, res) {
   if (Settings.processTooOld) {
     return res.status(500).json({ processTooOld: true })
   }
+  if (ProjectPersistenceManager.isAnyDiskCriticalLow()) {
+    return res.status(500).json({ diskCritical: true })
+  }
   smokeTest.sendLastResult(res)
 })
 
@@ -258,6 +261,8 @@ app.use(function (error, req, res, next) {
   if (error instanceof Errors.NotFoundError) {
     logger.debug({ err: error, url: req.url }, 'not found error')
     res.sendStatus(404)
+  } else if (error instanceof Errors.InvalidParameter) {
+    res.status(400).send(error.message)
   } else if (error.code === 'EPIPE') {
     // inspect container returns EPIPE when shutting down
     res.sendStatus(503) // send 503 Unavailable response
@@ -294,9 +299,14 @@ const loadTcpServer = net.createServer(function (socket) {
     }
 
     const freeLoad = availableWorkingCpus - currentLoad
-    const freeLoadPercentage = Math.round(
-      (freeLoad / availableWorkingCpus) * 100
-    )
+    let freeLoadPercentage = Math.round((freeLoad / availableWorkingCpus) * 100)
+    if (ProjectPersistenceManager.isAnyDiskCriticalLow()) {
+      freeLoadPercentage = 0
+    }
+    if (ProjectPersistenceManager.isAnyDiskLow()) {
+      freeLoadPercentage = freeLoadPercentage / 2
+    }
+
     if (
       Settings.internal.load_balancer_agent.allow_maintenance &&
       freeLoadPercentage <= 0

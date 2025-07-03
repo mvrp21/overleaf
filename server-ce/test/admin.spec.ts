@@ -179,6 +179,21 @@ describe('admin panel', function () {
         cy.get('nav').findByText('Manage Users').click()
       })
 
+      it('displays expected tabs', () => {
+        const tabs = ['Users', 'License Usage']
+        cy.get('[role="tab"]').each((el, index) => {
+          cy.wrap(el).findByText(tabs[index]).click()
+        })
+        cy.get('[role="tab"]').should('have.length', tabs.length)
+      })
+
+      it('license usage tab', () => {
+        cy.get('a').contains('License Usage').click()
+        cy.findByText(
+          'An active user is one who has opened a project in this Server Pro instance in the last 12 months.'
+        )
+      })
+
       describe('create users', () => {
         beforeEach(() => {
           cy.get('a').contains('New User').click()
@@ -293,8 +308,8 @@ describe('admin panel', function () {
       cy.findByText(deletedProjectName).should('not.exist')
 
       cy.log('navigate to thrashed projects and delete the project')
-      cy.get('.project-list-sidebar-react').within(() => {
-        cy.findByText('Trashed Projects').click()
+      cy.get('.project-list-sidebar-scroll').within(() => {
+        cy.findByText('Trashed projects').click()
       })
       findProjectRow(deletedProjectName).within(() =>
         cy.findByRole('button', { name: 'Delete' }).click()
@@ -318,8 +333,8 @@ describe('admin panel', function () {
       cy.log('login as the user and verify the project is restored')
       login(user1)
       cy.visit('/project')
-      cy.get('.project-list-sidebar-react').within(() => {
-        cy.findByText('Trashed Projects').click()
+      cy.get('.project-list-sidebar-scroll').within(() => {
+        cy.findByText('Trashed projects').click()
       })
       cy.findByText(`${deletedProjectName} (Restored)`)
     })

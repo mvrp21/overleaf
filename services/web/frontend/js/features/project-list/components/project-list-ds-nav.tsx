@@ -16,13 +16,14 @@ import { TableContainer } from '@/features/ui/components/bootstrap-5/table'
 import DashApiError from '@/features/project-list/components/dash-api-error'
 import getMeta from '@/utils/meta'
 import DefaultNavbar from '@/features/ui/components/bootstrap-5/navbar/default-navbar'
-import FatFooter from '@/features/ui/components/bootstrap-5/footer/fat-footer'
+import Footer from '@/features/ui/components/bootstrap-5/footer/footer'
 import SidebarDsNav from '@/features/project-list/components/sidebar/sidebar-ds-nav'
 import SystemMessages from '@/shared/components/system-messages'
 import overleafLogo from '@/shared/svgs/overleaf-a-ds-solution-mallard.svg'
 
 export function ProjectListDsNav() {
   const navbarProps = getMeta('ol-navbar')
+  const footerProps = getMeta('ol-footer')
   const { t } = useTranslation()
   const {
     error,
@@ -54,7 +55,11 @@ export function ProjectListDsNav() {
 
   return (
     <div className="project-ds-nav-page website-redesign">
-      <DefaultNavbar {...navbarProps} customLogo={overleafLogo} showCloseIcon />
+      <DefaultNavbar
+        {...navbarProps}
+        overleafLogo={overleafLogo}
+        showCloseIcon
+      />
       <main className="project-list-wrapper">
         <SidebarDsNav />
         <div className="project-ds-nav-content-and-messages">
@@ -117,7 +122,7 @@ export function ProjectListDsNav() {
                 </div>
               </div>
             </div>
-            <FatFooter />
+            <Footer {...footerProps} />
           </div>
           <div>
             <SystemMessages />

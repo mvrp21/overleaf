@@ -145,10 +145,14 @@ async function hasUserBeenAssignedToVariant(
   ignoreVersion = false
 ) {
   try {
-    const { session, query = {} } = req
+    const { session = {}, query = {} } = req
 
     const splitTest = await _getSplitTest(splitTestName)
     const currentVersion = SplitTestUtils.getCurrentVersion(splitTest)
+
+    if (!userId || !currentVersion?.active) {
+      return false
+    }
 
     // Check the query string for an override, ignoring an invalid value
     const queryVariant = query[splitTestName]

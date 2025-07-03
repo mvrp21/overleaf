@@ -1,4 +1,4 @@
-const Path = require('path')
+const Path = require('node:path')
 const { merge } = require('@overleaf/settings/merge')
 
 let defaultFeatures, siteUrl
@@ -241,6 +241,9 @@ module.exports = {
       backendGroupName: undefined,
       submissionBackendClass:
         process.env.CLSI_SUBMISSION_BACKEND_CLASS || 'n2d',
+    },
+    clsiCache: {
+      instances: JSON.parse(process.env.CLSI_CACHE_INSTANCES || '[]'),
     },
     project_history: {
       sendProjectStructureOps: true,
@@ -660,6 +663,11 @@ module.exports = {
   gracefulShutdownDelayInMs:
     parseInt(process.env.GRACEFUL_SHUTDOWN_DELAY_SECONDS ?? '5', 10) * seconds,
 
+  maxReconnectGracefullyIntervalMs: parseInt(
+    process.env.MAX_RECONNECT_GRACEFULLY_INTERVAL_MS ?? '30000',
+    10
+  ),
+
   // Expose the hostname in the `X-Served-By` response header
   exposeHostname: process.env.EXPOSE_HOSTNAME === 'true',
 
@@ -885,6 +893,7 @@ module.exports = {
           'figcaption',
           'span',
           'source',
+          'track',
           'video',
           'del',
         ],
@@ -910,7 +919,7 @@ module.exports = {
           col: ['width'],
           figure: ['class', 'id', 'style'],
           figcaption: ['class', 'id', 'style'],
-          i: ['aria-hidden', 'aria-label', 'class', 'id'],
+          i: ['aria-hidden', 'aria-label', 'class', 'id', 'translate'],
           iframe: [
             'allowfullscreen',
             'frameborder',
@@ -935,6 +944,7 @@ module.exports = {
             'style',
           ],
           tr: ['class'],
+          track: ['src', 'kind', 'srcLang', 'label'],
           video: ['alt', 'class', 'controls', 'height', 'width'],
         },
       },
@@ -958,8 +968,10 @@ module.exports = {
     editorToolbarButtons: [],
     sourceEditorExtensions: [],
     sourceEditorComponents: [],
+    pdfLogEntryHeaderActionComponents: [],
     pdfLogEntryComponents: [],
     pdfLogEntriesComponents: [],
+    pdfPreviewPromotions: [],
     diagnosticActions: [],
     sourceEditorCompletionSources: [],
     sourceEditorSymbolPalette: [],
@@ -984,11 +996,28 @@ module.exports = {
     settingsEntries: [],
     autoCompleteExtensions: [],
     sectionTitleGenerators: [],
-    toastGenerators: [],
-    editorSidebarComponents: [],
-    fileTreeToolbarComponents: [],
+    toastGenerators: [
+      Path.resolve(
+        __dirname,
+        '../frontend/js/features/pdf-preview/components/synctex-toasts'
+      ),
+    ],
+    editorSidebarComponents: [
+      Path.resolve(
+        __dirname,
+        '../modules/full-project-search/frontend/js/components/full-project-search.tsx'
+      ),
+    ],
+    fileTreeToolbarComponents: [
+      Path.resolve(
+        __dirname,
+        '../modules/full-project-search/frontend/js/components/full-project-search-button.tsx'
+      ),
+    ],
+    fullProjectSearchPanel: [],
     integrationPanelComponents: [],
     referenceSearchSetting: [],
+    errorLogsComponents: [],
   },
 
   moduleImportSequence: [

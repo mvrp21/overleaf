@@ -13,9 +13,10 @@ import {
   FormGroup,
   FormLabel,
   FormControl,
-} from 'react-bootstrap-5'
+} from 'react-bootstrap'
 import FormText from '@/features/ui/components/bootstrap-5/form/form-text'
 import Button from '@/features/ui/components/bootstrap-5/button'
+import PoNumber from '@/features/group-management/components/add-seats/po-number'
 import CostSummary from '@/features/group-management/components/add-seats/cost-summary'
 import RequestStatus from '@/features/group-management/components/request-status'
 import useAsync from '@/shared/hooks/use-async'
@@ -29,8 +30,10 @@ import {
 } from '../../../../../../types/subscription/subscription-change-preview'
 import { MergeAndOverride, Nullable } from '../../../../../../types/utils'
 import { sendMB } from '../../../../infrastructure/event-tracking'
+import { useFeatureFlag } from '@/shared/context/split-test-context'
 
 export const MAX_NUMBER_OF_USERS = 20
+export const MAX_NUMBER_OF_PO_NUMBER_CHARACTERS = 50
 
 type CostSummaryData = MergeAndOverride<
   SubscriptionChangePreview,
@@ -43,8 +46,13 @@ function AddSeats() {
   const subscriptionId = getMeta('ol-subscriptionId')
   const totalLicenses = Number(getMeta('ol-totalLicenses'))
   const isProfessional = getMeta('ol-isProfessional')
+  const isCollectionMethodManual = getMeta('ol-isCollectionMethodManual')
   const [addSeatsInputError, setAddSeatsInputError] = useState<string>()
+  const [poNumberInputError, setPoNumberInputError] = useState<string>()
   const [shouldContactSales, setShouldContactSales] = useState(false)
+  const isFlexibleGroupLicensingForManuallyBilledSubscriptions = useFeatureFlag(
+    'flexible-group-licensing-for-manually-billed-subscriptions'
+  )
   const controller = useAbortController()
   const { signal: addSeatsSignal } = useAbortController()
   const { signal: contactSalesSignal } = useAbortController()
@@ -119,6 +127,38 @@ function AddSeats() {
     }
   }
 
+  const poNumberValidationSchema = useMemo(() => {
+    return yup
+      .string()
+      .matches(
+        /^[\p{L}\p{N}]*$/u,
+        t('po_number_can_include_digits_and_letters_only')
+      )
+      .max(
+        MAX_NUMBER_OF_PO_NUMBER_CHARACTERS,
+        t('po_number_must_not_exceed_x_characters', {
+          count: MAX_NUMBER_OF_PO_NUMBER_CHARACTERS,
+        })
+      )
+  }, [t])
+
+  const validatePoNumber = async (value: string | undefined) => {
+    try {
+      await poNumberValidationSchema.validate(value)
+      setPoNumberInputError(undefined)
+
+      return true
+    } catch (error) {
+      if (error instanceof yup.ValidationError) {
+        setPoNumberInputError(error.errors[0])
+      } else {
+        debugConsole.error(error)
+      }
+
+      return false
+    }
+  }
+
   const handleSeatsChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value === '' ? undefined : e.target.value
     const isValidSeatsNumber = await validateSeats(value)
@@ -151,8 +191,14 @@ function AddSeats() {
       formData.get('seats') === ''
         ? undefined
         : (formData.get('seats') as string)
+    const poNumber = !formData.get('po_number')
+      ? undefined
+      : (formData.get('po_number') as string)
 
-    if (!(await validateSeats(rawSeats))) {
+    if (
+      !(await validateSeats(rawSeats)) ||
+      !(await validatePoNumber(poNumber))
+    ) {
       return
     }
 
@@ -166,6 +212,7 @@ function AddSeats() {
           signal: contactSalesSignal,
           body: {
             adding: rawSeats,
+            poNumber,
           },
         }
       )
@@ -176,7 +223,10 @@ function AddSeats() {
       })
       const post = postJSON('/user/subscription/group/add-users/create', {
         signal: addSeatsSignal,
-        body: { adding: Number(rawSeats) },
+        body: {
+          adding: Number(rawSeats),
+          poNumber,
+        },
       })
       runAsyncAddSeats(post)
         .then(() => {
@@ -226,10 +276,10 @@ function AddSeats() {
       <RequestStatus
         variant="primary"
         icon="check_circle"
-        title={t('youve_added_more_users')}
+        title={t('youve_added_more_licenses')}
         content={
           <Trans
-            i18nKey="youve_added_x_more_users_to_your_subscription_invite_people"
+            i18nKey="youve_added_x_more_licenses_to_your_subscription_invite_people"
             components={[
               // eslint-disable-next-line jsx-a11y/anchor-has-content, react/jsx-key
               <a
@@ -281,16 +331,16 @@ function AddSeats() {
               >
                 <div className="d-grid gap-1">
                   <h4 className="fw-bold m-0 card-description-secondary">
-                    {t('add_more_users')}
+                    {t('buy_more_licenses')}
                   </h4>
                   <div>
-                    {t('your_current_plan_supports_up_to_x_users', {
+                    {t('your_current_plan_supports_up_to_x_licenses', {
                       users: totalLicenses,
                     })}
                   </div>
                   <div>
                     <Trans
-                      i18nKey="if_you_want_to_reduce_the_number_of_users_please_contact_support"
+                      i18nKey="if_you_want_to_reduce_the_number_of_licenses_please_contact_support"
                       components={[
                         // eslint-disable-next-line jsx-a11y/anchor-has-content, react/jsx-key
                         <a
@@ -308,7 +358,7 @@ function AddSeats() {
                 <div>
                   <FormGroup controlId="number-of-users-input">
                     <FormLabel>
-                      {t('how_many_users_do_you_want_to_add')}
+                      {t('how_many_licenses_do_you_want_to_buy')}
                     </FormLabel>
                     <FormControl
                       type="text"
@@ -323,6 +373,13 @@ function AddSeats() {
                       <FormText type="error">{addSeatsInputError}</FormText>
                     )}
                   </FormGroup>
+                  {isFlexibleGroupLicensingForManuallyBilledSubscriptions &&
+                    isCollectionMethodManual && (
+                      <PoNumber
+                        error={poNumberInputError}
+                        validate={validatePoNumber}
+                      />
+                    )}
                 </div>
                 <CostSummarySection
                   isLoadingCostSummary={isLoadingCostSummary}
@@ -366,7 +423,7 @@ function AddSeats() {
                     }
                     isLoading={isAddingSeats || isSendingMailToSales}
                   >
-                    {shouldContactSales ? t('send_request') : t('add_users')}
+                    {shouldContactSales ? t('send_request') : t('buy_licenses')}
                   </Button>
                 </div>
               </form>
@@ -406,7 +463,7 @@ function CostSummarySection({
       <Notification
         content={
           <Trans
-            i18nKey="if_you_want_more_than_x_users_on_your_plan_we_need_to_add_them_for_you"
+            i18nKey="if_you_want_more_than_x_licenses_on_your_plan_we_need_to_add_them_for_you"
             // eslint-disable-next-line react/jsx-key
             components={[<b />]}
             values={{ count: MAX_NUMBER_OF_USERS }}

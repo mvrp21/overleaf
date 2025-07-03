@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { User } from '../../../../../../types/group-management/user'
 import { useGroupMembersContext } from '../../context/group-members-context'
 import type { GroupUserAlert } from '../../utils/types'
 import MemberRow from './member-row'
 import OffboardManagedUserModal from './offboard-managed-user-modal'
+import RemoveManagedUserModal from '@/features/group-management/components/members-table/remove-managed-user-modal'
 import ListAlert from './list-alert'
 import SelectAllCheckbox from './select-all-checkbox'
 import classNames from 'classnames'
@@ -22,12 +23,21 @@ export default function MembersList({ groupId }: ManagedUsersListProps) {
   const [userToOffboard, setUserToOffboard] = useState<User | undefined>(
     undefined
   )
+  const [userToRemove, setUserToRemove] = useState<User | undefined>(undefined)
   const [groupUserAlert, setGroupUserAlert] =
     useState<GroupUserAlert>(undefined)
   const [userToUnlink, setUserToUnlink] = useState<User | undefined>(undefined)
   const { users } = useGroupMembersContext()
   const managedUsersActive = getMeta('ol-managedUsersActive')
   const groupSSOActive = getMeta('ol-groupSSOActive')
+  const tHeadRowRef = useRef<HTMLTableRowElement>(null)
+  const [colSpan, setColSpan] = useState(0)
+
+  useEffect(() => {
+    if (tHeadRowRef.current) {
+      setColSpan(tHeadRowRef.current.querySelectorAll('th').length)
+    }
+  }, [])
 
   return (
     <div>
@@ -53,7 +63,7 @@ export default function MembersList({ groupId }: ManagedUsersListProps) {
         data-testid="managed-entities-table"
       >
         <thead>
-          <tr>
+          <tr ref={tHeadRowRef}>
             <SelectAllCheckbox />
             <th className="cell-email">{t('email')}</th>
             <th className="cell-name">{t('name')}</th>
@@ -83,7 +93,7 @@ export default function MembersList({ groupId }: ManagedUsersListProps) {
         <tbody>
           {users.length === 0 && (
             <tr>
-              <td className="text-center" colSpan={5}>
+              <td className="text-center" colSpan={colSpan}>
                 <small>{t('no_members')}</small>
               </td>
             </tr>
@@ -93,6 +103,7 @@ export default function MembersList({ groupId }: ManagedUsersListProps) {
               key={user.email}
               user={user}
               openOffboardingModalForUser={setUserToOffboard}
+              openRemoveModalForUser={setUserToRemove}
               openUnlinkUserModal={setUserToUnlink}
               setGroupUserAlert={setGroupUserAlert}
               groupId={groupId}
@@ -106,6 +117,13 @@ export default function MembersList({ groupId }: ManagedUsersListProps) {
           groupId={groupId}
           allMembers={users}
           onClose={() => setUserToOffboard(undefined)}
+        />
+      )}
+      {userToRemove && (
+        <RemoveManagedUserModal
+          user={userToRemove}
+          groupId={groupId}
+          onClose={() => setUserToRemove(undefined)}
         />
       )}
       {userToUnlink && (

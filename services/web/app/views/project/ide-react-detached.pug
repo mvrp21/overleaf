@@ -8,11 +8,10 @@ block vars
 	- var suppressFooter = true
 	- var suppressSkipToContent = true
 	- var suppressCookieBanner = true
-	- bootstrap5PageStatus = 'enabled' // One of 'disabled', 'enabled', and 'queryStringOnly'
 	- metadata.robotsNoindexNofollow = true
 
 block content
-	#pdf-preview-detached-root()
+	#pdf-preview-detached-root
 
 block append meta
 	include editor/_meta

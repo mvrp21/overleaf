@@ -83,6 +83,44 @@ io.configure(function () {
   io.set('match origin protocol', true)
 
   io.set('transports', ['websocket', 'xhr-polling'])
+
+  if (Settings.allowedCorsOrigins) {
+    // Create a regex for matching origins, allowing wildcard subdomains
+    const allowedCorsOriginsRegex = new RegExp(
+      `^${Settings.allowedCorsOrigins.replaceAll('.', '\\.').replace('://*', '://[^.]+')}(?::443)?$`
+    )
+
+    io.set('origins', function (origin, req) {
+      if (!origin) {
+        // There is no origin or referer header - this is likely a same-site request.
+        logger.warn({ req }, 'No origin or referer header')
+        return true
+      }
+      const normalizedOrigin = URL.parse(origin).origin
+      const originIsValid = allowedCorsOriginsRegex.test(normalizedOrigin)
+
+      if (req.headers.origin) {
+        if (!originIsValid) {
+          logger.warn(
+            { normalizedOrigin, origin, req },
+            'Origin header does not match allowed origins'
+          )
+        }
+        return originIsValid
+      }
+
+      if (!originIsValid) {
+        // There is no Origin header and the Referrer does not satisfy the
+        // constraints. We're going to pass this anyway for now but log it
+        logger.warn(
+          { req, referer: req.headers.referer },
+          'Referrer header does not match allowed origins'
+        )
+      }
+
+      return true
+    })
+  }
 })
 
 // Serve socket.io.js client file from imported dist folder
@@ -227,6 +265,7 @@ function drainAndShutdown(signal) {
 }
 
 Settings.shutDownInProgress = false
+Settings.shutDownScheduled = false
 const shutdownDrainTimeWindow = parseInt(Settings.shutdownDrainTimeWindow, 10)
 if (Settings.shutdownDrainTimeWindow) {
   logger.info({ shutdownDrainTimeWindow }, 'shutdownDrainTimeWindow enabled')
@@ -266,8 +305,16 @@ if (Settings.shutdownDrainTimeWindow) {
         )
       }
       logger.error({ err: error }, 'uncaught exception')
-      if (Settings.errors && Settings.errors.shutdownOnUncaughtError) {
-        drainAndShutdown('SIGABRT')
+      if (
+        Settings.errors?.shutdownOnUncaughtError &&
+        !Settings.shutDownScheduled
+      ) {
+        Settings.shutDownScheduled = true
+        const delay = Math.ceil(
+          Math.random() * 60 * Math.max(io.sockets.clients().length, 1_000)
+        )
+        logger.info({ delay }, 'delaying shutdown on uncaught error')
+        setTimeout(() => drainAndShutdown('SIGABRT'), delay)
       }
     })
   }

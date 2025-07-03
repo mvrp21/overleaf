@@ -1,11 +1,10 @@
-import React, { useCallback, useState } from 'react'
+import React, { ChangeEvent, useCallback, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import useWaitForI18n from '../../../shared/hooks/use-wait-for-i18n'
 import getMeta from '../../../utils/meta'
 import { useGroupMembersContext } from '../context/group-members-context'
 import ErrorAlert from './error-alert'
 import MembersList from './members-table/members-list'
-import { useFeatureFlag } from '@/shared/context/split-test-context'
 import { sendMB } from '../../../infrastructure/event-tracking'
 import BackButton from '@/features/group-management/components/back-button'
 import OLRow from '@/features/ui/components/ol/ol-row'
@@ -30,20 +29,15 @@ export default function GroupMembers() {
     paths,
   } = useGroupMembersContext()
   const [emailString, setEmailString] = useState<string>('')
-  const isFlexibleGroupLicensingFeatureFlagEnabled = useFeatureFlag(
-    'flexible-group-licensing'
-  )
 
   const groupId = getMeta('ol-groupId')
   const groupName = getMeta('ol-groupName')
   const groupSize = getMeta('ol-groupSize')
   const canUseFlexibleLicensing = getMeta('ol-canUseFlexibleLicensing')
   const canUseAddSeatsFeature = getMeta('ol-canUseAddSeatsFeature')
-  const isFlexibleGroupLicensing =
-    canUseFlexibleLicensing && isFlexibleGroupLicensingFeatureFlagEnabled
 
   const handleEmailsChange = useCallback(
-    e => {
+    (e: ChangeEvent<HTMLInputElement>) => {
       setEmailString(e.target.value)
     },
     [setEmailString]
@@ -59,15 +53,15 @@ export default function GroupMembers() {
   }
 
   const groupSizeDetails = () => {
-    if (isFlexibleGroupLicensing) {
+    if (canUseFlexibleLicensing) {
       return (
         <small data-testid="group-size-details">
           <strong>
             {users.length === 1
-              ? t('you_have_1_user_and_your_plan_supports_up_to_y', {
+              ? t('you_have_1_license_and_your_plan_supports_up_to_y', {
                   groupSize,
                 })
-              : t('you_have_x_users_and_your_plan_supports_up_to_y', {
+              : t('you_have_x_licenses_and_your_plan_supports_up_to_y', {
                   addedUsersSize: users.length,
                   groupSize,
                 })}
@@ -80,7 +74,7 @@ export default function GroupMembers() {
                 rel="noreferrer noopener"
                 onClick={() => sendMB('flex-add-users')}
               >
-                {t('add_more_users')}.
+                {t('buy_more_licenses')}.
               </a>
             </>
           )}
@@ -145,11 +139,7 @@ export default function GroupMembers() {
                 className="add-more-members-form"
                 data-testid="add-more-members-form"
               >
-                <p className="small">
-                  {isFlexibleGroupLicensing
-                    ? t('invite_more_members')
-                    : t('add_more_members')}
-                </p>
+                <p className="small">{t('invite_more_members')}</p>
                 <ErrorAlert error={inviteError} />
                 <form onSubmit={onAddMembersSubmit}>
                   <OLRow>
@@ -167,22 +157,9 @@ export default function GroupMembers() {
                         variant="primary"
                         onClick={onAddMembersSubmit}
                         isLoading={inviteMemberLoading}
-                        bs3Props={{
-                          loading: inviteMemberLoading ? (
-                            <>
-                              {isFlexibleGroupLicensing
-                                ? t('inviting')
-                                : t('adding')}
-                              &hellip;
-                            </>
-                          ) : isFlexibleGroupLicensing ? (
-                            t('invite')
-                          ) : (
-                            t('add')
-                          ),
-                        }}
+                        loadingLabel={t('inviting')}
                       >
-                        {isFlexibleGroupLicensing ? t('invite') : t('add')}
+                        {t('invite')}
                       </OLButton>
                     </OLCol>
                     <OLCol xs={2}>
@@ -191,7 +168,7 @@ export default function GroupMembers() {
                   </OLRow>
                   <OLRow>
                     <OLCol xs={8}>
-                      <OLFormText bs3Props={{ className: 'help-block' }}>
+                      <OLFormText>
                         {t('add_comma_separated_emails_help')}
                       </OLFormText>
                     </OLCol>

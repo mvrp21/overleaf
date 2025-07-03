@@ -1,4 +1,4 @@
-import { FC, memo, useRef } from 'react'
+import { FC, memo, useEffect, useRef } from 'react'
 import useDropdown from '../../../../shared/hooks/use-dropdown'
 import OLListGroup from '@/features/ui/components/ol/ol-list-group'
 import OLTooltip from '@/features/ui/components/ol/ol-tooltip'
@@ -8,20 +8,36 @@ import { EditorView } from '@codemirror/view'
 import { emitToolbarEvent } from '../../extensions/toolbar/utils/analytics'
 import { useCodeMirrorViewContext } from '../codemirror-context'
 
-export const ToolbarButtonMenu: FC<{
-  id: string
-  label: string
-  icon: React.ReactNode
-  altCommand?: (view: EditorView) => void
-}> = memo(function ButtonMenu({ icon, id, label, altCommand, children }) {
+export const ToolbarButtonMenu: FC<
+  React.PropsWithChildren<{
+    id: string
+    label: string
+    icon: React.ReactNode
+    disablePopover?: boolean
+    altCommand?: (view: EditorView) => void
+  }>
+> = memo(function ButtonMenu({
+  icon,
+  id,
+  label,
+  altCommand,
+  disablePopover,
+  children,
+}) {
   const target = useRef<any>(null)
   const { open, onToggle, ref } = useDropdown()
   const view = useCodeMirrorViewContext()
 
+  useEffect(() => {
+    if (disablePopover && open) {
+      onToggle(false)
+    }
+  }, [open, disablePopover, onToggle])
+
   const button = (
     <button
       type="button"
-      className="ol-cm-toolbar-button btn"
+      className="ol-cm-toolbar-button"
       aria-label={label}
       onMouseDown={event => {
         event.preventDefault()
@@ -45,7 +61,7 @@ export const ToolbarButtonMenu: FC<{
 
   const overlay = (
     <OLOverlay
-      show={open}
+      show={open && !disablePopover}
       target={target.current}
       placement="bottom"
       container={view.dom}

@@ -5,7 +5,7 @@ import NewProjectButton from '../new-project-button'
 import SidebarFilters from './sidebar-filters'
 import AddAffiliation, { useAddAffiliation } from '../add-affiliation'
 import { usePersistedResize } from '@/shared/hooks/use-resize'
-import { Dropdown } from 'react-bootstrap-5'
+import { Dropdown } from 'react-bootstrap'
 import getMeta from '@/utils/meta'
 import OLTooltip from '@/features/ui/components/ol/ol-tooltip'
 import { useTranslation } from 'react-i18next'
@@ -49,7 +49,11 @@ function SidebarDsNav() {
         id="new-project-button-sidebar"
         className={scrolledDown ? 'show-shadow' : undefined}
       />
-      <div className="project-list-sidebar-scroll" ref={containerRef}>
+      <div
+        className="project-list-sidebar-scroll"
+        ref={containerRef}
+        data-testid="project-list-sidebar-scroll"
+      >
         <SidebarFilters />
         {showAddAffiliationWidget && <hr />}
         <AddAffiliation />
@@ -73,6 +77,7 @@ function SidebarDsNav() {
                   sendMB('menu-expand', { item: 'help', location: 'sidebar' })
                 }
               }}
+              role="menu"
             >
               <Dropdown.Toggle role="menuitem" aria-label={t('help')}>
                 <OLTooltip
@@ -117,6 +122,7 @@ function SidebarDsNav() {
                     })
                   }
                 }}
+                role="menu"
               >
                 <Dropdown.Toggle role="menuitem" aria-label={t('Account')}>
                   <OLTooltip
@@ -152,7 +158,7 @@ function SidebarDsNav() {
             </>
           )}
         </div>
-        <div className="ds-nav-ds-name">
+        <div className="ds-nav-ds-name" translate="no">
           <span>Digital Science</span>
         </div>
       </div>

@@ -9,7 +9,7 @@ export const Default = () => {
     <MenuBar id="toolbar-menu-bar-item">
       <MenuBarDropdown title="File" id="file">
         <MenuBarOption title="New File" />
-        <MenuBarOption title="New Project" />
+        <MenuBarOption title="New project" />
       </MenuBarDropdown>
       <MenuBarDropdown title="Edit" id="edit">
         <MenuBarOption title="Undo" />
@@ -30,9 +30,6 @@ const meta: Meta<typeof MenuBar> = {
   title: 'Shared / Components / MenuBar',
   component: MenuBar,
   argTypes: {},
-  parameters: {
-    bootstrap5: true,
-  },
 }
 
 export default meta

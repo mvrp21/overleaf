@@ -1,11 +1,18 @@
-const { ObjectId, ReadPreference } = require('mongodb')
+// @ts-check
+
+const { ObjectId, ReadPreference, MongoError } = require('mongodb')
 const { Chunk } = require('overleaf-editor-core')
 const OError = require('@overleaf/o-error')
+const config = require('config')
 const assert = require('../assert')
 const mongodb = require('../mongodb')
 const { ChunkVersionConflictError } = require('./errors')
 
 const DUPLICATE_KEY_ERROR_CODE = 11000
+
+/**
+ * @import { ClientSession } from 'mongodb'
+ */
 
 /**
  * Get the latest chunk's metadata from the database
@@ -18,7 +25,10 @@ async function getLatestChunk(projectId, opts = {}) {
   const { readOnly = false } = opts
 
   const record = await mongodb.chunks.findOne(
-    { projectId: new ObjectId(projectId), state: 'active' },
+    {
+      projectId: new ObjectId(projectId),
+      state: { $in: ['active', 'closed'] },
+    },
     {
       sort: { startVersion: -1 },
       readPreference: readOnly
@@ -34,19 +44,25 @@ async function getLatestChunk(projectId, opts = {}) {
 
 /**
  * Get the metadata for the chunk that contains the given version.
+ *
+ * @param {string} projectId
+ * @param {number} version
+ * @param {object} [opts]
+ * @param {boolean} [opts.preferNewer] - If the version is at the boundary of
+ *        two chunks, return the newer chunk.
  */
-async function getChunkForVersion(projectId, version) {
+async function getChunkForVersion(projectId, version, opts = {}) {
   assert.mongoId(projectId, 'bad projectId')
   assert.integer(version, 'bad version')
 
   const record = await mongodb.chunks.findOne(
     {
       projectId: new ObjectId(projectId),
-      state: 'active',
+      state: { $in: ['active', 'closed'] },
       startVersion: { $lte: version },
       endVersion: { $gte: version },
     },
-    { sort: { startVersion: 1 } }
+    { sort: { startVersion: opts.preferNewer ? -1 : 1 } }
   )
   if (record == null) {
     throw new Chunk.VersionNotFoundError(projectId, version)
@@ -94,7 +110,7 @@ async function getChunkForTimestamp(projectId, timestamp) {
   const record = await mongodb.chunks.findOne(
     {
       projectId: new ObjectId(projectId),
-      state: 'active',
+      state: { $in: ['active', 'closed'] },
       endTimestamp: { $gte: timestamp },
     },
     // We use the index on the startVersion for sorting records. This assumes
@@ -126,7 +142,7 @@ async function getLastActiveChunkBeforeTimestamp(projectId, timestamp) {
   const record = await mongodb.chunks.findOne(
     {
       projectId: new ObjectId(projectId),
-      state: 'active',
+      state: { $in: ['active', 'closed'] },
       $or: [
         {
           endTimestamp: {
@@ -155,7 +171,10 @@ async function getProjectChunkIds(projectId) {
   assert.mongoId(projectId, 'bad projectId')
 
   const cursor = mongodb.chunks.find(
-    { projectId: new ObjectId(projectId), state: 'active' },
+    {
+      projectId: new ObjectId(projectId),
+      state: { $in: ['active', 'closed'] },
+    },
     { projection: { _id: 1 } }
   )
   return await cursor.map(record => record._id).toArray()
@@ -169,7 +188,10 @@ async function getProjectChunks(projectId) {
 
   const cursor = mongodb.chunks
     .find(
-      { projectId: new ObjectId(projectId), state: 'active' },
+      {
+        projectId: new ObjectId(projectId),
+        state: { $in: ['active', 'closed'] },
+      },
       { projection: { state: 0 } }
     )
     .sort({ startVersion: 1 })
@@ -198,48 +220,35 @@ async function insertPendingChunk(projectId, chunk) {
 
 /**
  * Record that a new chunk was created.
+ *
+ * @param {string} projectId
+ * @param {Chunk} chunk
+ * @param {string} chunkId
+ * @param {object} opts
+ * @param {Date} [opts.earliestChangeTimestamp]
+ * @param {string} [opts.oldChunkId]
  */
-async function confirmCreate(
-  projectId,
-  chunk,
-  chunkId,
-  earliestChangeTimestamp,
-  mongoOpts = {}
-) {
+async function confirmCreate(projectId, chunk, chunkId, opts = {}) {
   assert.mongoId(projectId, 'bad projectId')
-  assert.instance(chunk, Chunk, 'bad chunk')
-  assert.mongoId(chunkId, 'bad chunkId')
+  assert.instance(chunk, Chunk, 'bad newChunk')
+  assert.mongoId(chunkId, 'bad newChunkId')
 
-  let result
-  try {
-    result = await mongodb.chunks.updateOne(
-      {
-        _id: new ObjectId(chunkId),
-        projectId: new ObjectId(projectId),
-        state: 'pending',
-      },
-      { $set: { state: 'active', updatedAt: new Date() } },
-      mongoOpts
-    )
-  } catch (err) {
-    if (err.code === DUPLICATE_KEY_ERROR_CODE) {
-      throw new ChunkVersionConflictError('chunk start version is not unique', {
+  await mongodb.client.withSession(async session => {
+    await session.withTransaction(async () => {
+      if (opts.oldChunkId != null) {
+        await closeChunk(projectId, opts.oldChunkId, { session })
+      }
+
+      await activateChunk(projectId, chunkId, { session })
+
+      await updateProjectRecord(
         projectId,
-        chunkId,
-      })
-    } else {
-      throw err
-    }
-  }
-  if (result.matchedCount === 0) {
-    throw new OError('pending chunk not found', { projectId, chunkId })
-  }
-  await updateProjectRecord(
-    projectId,
-    chunk,
-    earliestChangeTimestamp,
-    mongoOpts
-  )
+        chunk,
+        opts.earliestChangeTimestamp,
+        { session }
+      )
+    })
+  })
 }
 
 /**
@@ -251,6 +260,9 @@ async function updateProjectRecord(
   earliestChangeTimestamp,
   mongoOpts = {}
 ) {
+  if (!config.has('backupStore')) {
+    return
+  }
   // record the end version against the project
   await mongodb.projects.updateOne(
     {
@@ -275,42 +287,167 @@ async function updateProjectRecord(
 }
 
 /**
+ * @param {number} historyId
+ * @return {Promise<string>}
+ */
+async function lookupMongoProjectIdFromHistoryId(historyId) {
+  const project = await mongodb.projects.findOne(
+    // string for Object ids, number for postgres ids
+    { 'overleaf.history.id': historyId },
+    { projection: { _id: 1 } }
+  )
+  if (!project) {
+    // should not happen: We flush before allowing a project to be soft-deleted.
+    throw new OError('mongo project not found by history id', { historyId })
+  }
+  return project._id.toString()
+}
+
+async function resolveHistoryIdToMongoProjectId(projectId) {
+  return projectId
+}
+
+/**
  * Record that a chunk was replaced by a new one.
+ *
+ * @param {string} projectId
+ * @param {string} oldChunkId
+ * @param {Chunk} newChunk
+ * @param {string} newChunkId
+ * @param {object} [opts]
+ * @param {Date} [opts.earliestChangeTimestamp]
  */
 async function confirmUpdate(
   projectId,
   oldChunkId,
   newChunk,
   newChunkId,
-  earliestChangeTimestamp
+  opts = {}
 ) {
   assert.mongoId(projectId, 'bad projectId')
   assert.mongoId(oldChunkId, 'bad oldChunkId')
   assert.instance(newChunk, Chunk, 'bad newChunk')
   assert.mongoId(newChunkId, 'bad newChunkId')
 
-  const session = mongodb.client.startSession()
-  try {
+  await mongodb.client.withSession(async session => {
     await session.withTransaction(async () => {
-      await deleteChunk(projectId, oldChunkId, { session })
-      await confirmCreate(
+      await deleteActiveChunk(projectId, oldChunkId, { session })
+
+      await activateChunk(projectId, newChunkId, { session })
+
+      await updateProjectRecord(
         projectId,
         newChunk,
-        newChunkId,
-        earliestChangeTimestamp,
+        opts.earliestChangeTimestamp,
         { session }
       )
     })
-  } finally {
-    await session.endSession()
+  })
+}
+
+/**
+ * Activate a pending chunk
+ *
+ * @param {string} projectId
+ * @param {string} chunkId
+ * @param {object} [opts]
+ * @param {ClientSession} [opts.session]
+ */
+async function activateChunk(projectId, chunkId, opts = {}) {
+  assert.mongoId(projectId, 'bad projectId')
+  assert.mongoId(chunkId, 'bad chunkId')
+
+  let result
+  try {
+    result = await mongodb.chunks.updateOne(
+      {
+        _id: new ObjectId(chunkId),
+        projectId: new ObjectId(projectId),
+        state: 'pending',
+      },
+      { $set: { state: 'active', updatedAt: new Date() } },
+      opts
+    )
+  } catch (err) {
+    if (err instanceof MongoError && err.code === DUPLICATE_KEY_ERROR_CODE) {
+      throw new ChunkVersionConflictError('chunk start version is not unique', {
+        projectId,
+        chunkId,
+      })
+    } else {
+      throw err
+    }
+  }
+  if (result.matchedCount === 0) {
+    throw new OError('pending chunk not found', { projectId, chunkId })
+  }
+}
+
+/**
+ * Close a chunk
+ *
+ * A closed chunk is one that can't be extended anymore.
+ *
+ * @param {string} projectId
+ * @param {string} chunkId
+ * @param {object} [opts]
+ * @param {ClientSession} [opts.session]
+ */
+async function closeChunk(projectId, chunkId, opts = {}) {
+  const result = await mongodb.chunks.updateOne(
+    {
+      _id: new ObjectId(chunkId),
+      projectId: new ObjectId(projectId),
+      state: 'active',
+    },
+    { $set: { state: 'closed' } },
+    opts
+  )
+
+  if (result.matchedCount === 0) {
+    throw new ChunkVersionConflictError('unable to close chunk', {
+      projectId,
+      chunkId,
+    })
+  }
+}
+
+/**
+ * Delete an active chunk
+ *
+ * This is used to delete chunks that are in the process of being extended. It
+ * will refuse to delete chunks that are already closed and can therefore not be
+ * extended.
+ *
+ * @param {string} projectId
+ * @param {string} chunkId
+ * @param {object} [opts]
+ * @param {ClientSession} [opts.session]
+ */
+async function deleteActiveChunk(projectId, chunkId, opts = {}) {
+  const updateResult = await mongodb.chunks.updateOne(
+    {
+      _id: new ObjectId(chunkId),
+      projectId: new ObjectId(projectId),
+      state: 'active',
+    },
+    { $set: { state: 'deleted', updatedAt: new Date() } },
+    opts
+  )
+
+  if (updateResult.matchedCount === 0) {
+    throw new ChunkVersionConflictError('unable to delete active chunk', {
+      projectId,
+      chunkId,
+    })
   }
 }
 
 /**
  * Delete a chunk.
  *
- * @param {number} projectId
- * @param {number} chunkId
+ * @param {string} projectId
+ * @param {string} chunkId
  * @return {Promise}
  */
 async function deleteChunk(projectId, chunkId, mongoOpts = {}) {
@@ -331,7 +468,10 @@ async function deleteProjectChunks(projectId) {
   assert.mongoId(projectId, 'bad projectId')
 
   await mongodb.chunks.updateMany(
-    { projectId: new ObjectId(projectId), state: 'active' },
+    {
+      projectId: new ObjectId(projectId),
+      state: { $in: ['active', 'closed'] },
+    },
     { $set: { state: 'deleted', updatedAt: new Date() } }
   )
 }
@@ -414,4 +554,6 @@ module.exports = {
   deleteProjectChunks,
   getOldChunksBatch,
   deleteOldChunks,
+  lookupMongoProjectIdFromHistoryId,
+  resolveHistoryIdToMongoProjectId,
 }

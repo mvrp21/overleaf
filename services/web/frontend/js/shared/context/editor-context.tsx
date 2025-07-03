@@ -20,26 +20,18 @@ import { saveProjectSettings } from '@/features/editor-left-menu/utils/api'
 import { PermissionsLevel } from '@/features/ide-react/types/permissions'
 import { useModalsContext } from '@/features/ide-react/context/modals-context'
 import { WritefullAPI } from './types/writefull-instance'
+import { Cobranding } from '../../../../types/cobranding'
+import { SymbolWithCharacter } from '../../../../modules/symbol-palette/frontend/js/data/symbols'
 
 export const EditorContext = createContext<
   | {
-      cobranding?: {
-        logoImgUrl: string
-        brandVariationName: string
-        brandVariationId: number
-        brandId: number
-        brandVariationHomeUrl: string
-        publishGuideHtml?: string
-        partner?: string
-        brandedMenu?: boolean
-        submitBtnHtml?: string
-      }
+      cobranding?: Cobranding
       hasPremiumCompile?: boolean
       renameProject: (newName: string) => void
       setPermissionsLevel: (permissionsLevel: PermissionsLevel) => void
       showSymbolPalette?: boolean
       toggleSymbolPalette?: () => void
-      insertSymbol?: (symbol: string) => void
+      insertSymbol?: (symbol: SymbolWithCharacter) => void
       isProjectOwner: boolean
       isRestrictedTokenMember?: boolean
       isPendingEditor: boolean
@@ -49,8 +41,6 @@ export const EditorContext = createContext<
       currentPopup: string | null
       setCurrentPopup: Dispatch<SetStateAction<string | null>>
       setOutOfSync: (value: boolean) => void
-      assistantUpgraded: boolean
-      setAssistantUpgraded: (value: boolean) => void
       hasPremiumSuggestion: boolean
       setHasPremiumSuggestion: (value: boolean) => void
       setPremiumSuggestionResetDate: (date: Date) => void
@@ -61,7 +51,7 @@ export const EditorContext = createContext<
   | undefined
 >(undefined)
 
-export const EditorProvider: FC = ({ children }) => {
+export const EditorProvider: FC<React.PropsWithChildren> = ({ children }) => {
   const { socket } = useIdeContext()
   const { id: userId, featureUsage } = useUserContext()
   const { role } = useDetachContext()
@@ -82,6 +72,7 @@ export const EditorProvider: FC = ({ children }) => {
         partner: brandVariation.partner,
         brandedMenu: brandVariation.branded_menu,
         submitBtnHtml: brandVariation.submit_button_html,
+        submitBtnHtmlNoBreaks: brandVariation.submit_button_html_no_br,
       }
     )
   }, [])
@@ -98,7 +89,6 @@ export const EditorProvider: FC = ({ children }) => {
   )
 
   const [currentPopup, setCurrentPopup] = useState<string | null>(null)
-  const [assistantUpgraded, setAssistantUpgraded] = useState(false)
   const [hasPremiumSuggestion, setHasPremiumSuggestion] = useState<boolean>(
     () => {
       return Boolean(
@@ -116,12 +106,16 @@ export const EditorProvider: FC = ({ children }) => {
 
   const isPendingEditor = useMemo(
     () =>
-      members?.some(member => member._id === userId && member.pendingEditor),
+      members?.some(
+        member =>
+          member._id === userId &&
+          (member.pendingEditor || member.pendingReviewer)
+      ),
     [members, userId]
   )
 
   const deactivateTutorial = useCallback(
-    tutorialKey => {
+    (tutorialKey: string) => {
       setInactiveTutorials([...inactiveTutorials, tutorialKey])
     },
     [inactiveTutorials]
@@ -177,7 +171,7 @@ export const EditorProvider: FC = ({ children }) => {
     setTitle(title)
   }, [projectName, setTitle, role])
 
-  const insertSymbol = useCallback((symbol: string) => {
+  const insertSymbol = useCallback((symbol: SymbolWithCharacter) => {
     window.dispatchEvent(
       new CustomEvent('editor:insert-symbol', {
         detail: symbol,
@@ -210,8 +204,6 @@ export const EditorProvider: FC = ({ children }) => {
       setHasPremiumSuggestion,
       premiumSuggestionResetDate,
       setPremiumSuggestionResetDate,
-      assistantUpgraded,
-      setAssistantUpgraded,
       writefullInstance,
       setWritefullInstance,
     }),
@@ -237,8 +229,6 @@ export const EditorProvider: FC = ({ children }) => {
       setHasPremiumSuggestion,
       premiumSuggestionResetDate,
       setPremiumSuggestionResetDate,
-      assistantUpgraded,
-      setAssistantUpgraded,
       writefullInstance,
       setWritefullInstance,
     ]

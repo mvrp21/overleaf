@@ -1,6 +1,7 @@
 import { UserId } from '../../../../../types/user'
 import { PublicAccessLevel } from '../../../../../types/public-access-level'
 import { ProjectSnapshot } from '@/infrastructure/project-snapshot'
+import { Tag } from '../../../../../app/src/Features/Tags/types'
 
 export type ProjectContextMember = {
   _id: UserId
@@ -9,6 +10,7 @@ export type ProjectContextMember = {
   first_name: string
   last_name: string
   pendingEditor?: boolean
+  pendingReviewer?: boolean
 }
 
 export type ProjectContextValue = {
@@ -17,6 +19,7 @@ export type ProjectContextValue = {
   rootDocId?: string
   mainBibliographyDocId?: string
   compiler: string
+  imageName: string
   members: ProjectContextMember[]
   invites: ProjectContextMember[]
   features: {
@@ -41,13 +44,10 @@ export type ProjectContextValue = {
     privileges: string
     signUpDate: string
   }
-  tags: {
-    _id: string
-    name: string
-    color?: string
-  }[]
+  tags: Tag[]
   trackChangesState: boolean | Record<UserId | '__guests__', boolean>
   projectSnapshot: ProjectSnapshot
+  joinedOnce: boolean
 }
 
 export type ProjectContextUpdateValue = Partial<ProjectContextValue>

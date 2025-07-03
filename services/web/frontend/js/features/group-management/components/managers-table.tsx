@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { ChangeEvent, FormEvent, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { deleteJSON, FetchError, postJSON } from '@/infrastructure/fetch-json'
 import getMeta from '../../../utils/meta'
@@ -18,7 +18,6 @@ import OLFormText from '@/features/ui/components/ol/ol-form-text'
 import OLTable from '@/features/ui/components/ol/ol-table'
 import OLTooltip from '@/features/ui/components/ol/ol-tooltip'
 import OLFormCheckbox from '@/features/ui/components/ol/ol-form-checkbox'
-import BootstrapVersionSwitcher from '@/features/ui/components/bootstrap-5/bootstrap-version-switcher'
 
 type ManagersPaths = {
   addMember: string
@@ -59,7 +58,7 @@ export function ManagersTable({
   const [removeMemberError, setRemoveMemberError] = useState<APIError>()
 
   const addManagers = useCallback(
-    e => {
+    (e: FormEvent | React.MouseEvent) => {
       e.preventDefault()
       setInviteError(undefined)
       const emails = parseEmails(emailString)
@@ -93,7 +92,7 @@ export function ManagersTable({
   )
 
   const removeManagers = useCallback(
-    e => {
+    (e: React.MouseEvent) => {
       e.preventDefault()
       setRemoveMemberError(undefined)
       ;(async () => {
@@ -132,7 +131,7 @@ export function ManagersTable({
   )
 
   const handleEmailsChange = useCallback(
-    e => {
+    (e: ChangeEvent<HTMLInputElement>) => {
       setEmailString(e.target.value)
     },
     [setEmailString]
@@ -182,27 +181,12 @@ export function ManagersTable({
                 <thead>
                   <tr>
                     <th className="cell-checkbox">
-                      <BootstrapVersionSwitcher
-                        bs3={
-                          <input
-                            className="select-all"
-                            type="checkbox"
-                            autoComplete="off"
-                            onChange={handleSelectAllClick}
-                            checked={selectedUsers.length === users.length}
-                            aria-label={t('select_all')}
-                            data-testid="select-all-checkbox"
-                          />
-                        }
-                        bs5={
-                          <OLFormCheckbox
-                            autoComplete="off"
-                            onChange={handleSelectAllClick}
-                            checked={selectedUsers.length === users.length}
-                            aria-label={t('select_all')}
-                            data-testid="select-all-checkbox"
-                          />
-                        }
+                      <OLFormCheckbox
+                        autoComplete="off"
+                        onChange={handleSelectAllClick}
+                        checked={selectedUsers.length === users.length}
+                        aria-label={t('select_all')}
+                        data-testid="select-all-checkbox"
                       />
                     </th>
                     <th>{t('email')}</th>
@@ -266,14 +250,6 @@ export function ManagersTable({
                       variant="primary"
                       onClick={addManagers}
                       isLoading={inviteUserInflightCount > 0}
-                      bs3Props={{
-                        loading:
-                          inviteUserInflightCount > 0 ? (
-                            <>{t('adding')}&hellip;</>
-                          ) : (
-                            t('add')
-                          ),
-                      }}
                     >
                       {t('add')}
                     </OLButton>
@@ -281,7 +257,7 @@ export function ManagersTable({
                 </OLRow>
                 <OLRow>
                   <OLCol xs={8}>
-                    <OLFormText bs3Props={{ className: 'help-block' }}>
+                    <OLFormText>
                       {t('add_comma_separated_emails_help')}
                     </OLFormText>
                   </OLCol>

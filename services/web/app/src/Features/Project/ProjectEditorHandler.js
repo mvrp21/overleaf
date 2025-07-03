@@ -3,23 +3,16 @@ const _ = require('lodash')
 const Path = require('path')
 const Features = require('../../infrastructure/Features')
 
-function mergeDeletedDocs(a, b) {
-  const docIdsInA = new Set(a.map(doc => doc._id.toString()))
-  return a.concat(b.filter(doc => !docIdsInA.has(doc._id.toString())))
-}
-
 module.exports = ProjectEditorHandler = {
   trackChangesAvailable: false,
 
-  buildProjectModelView(project, members, invites, deletedDocsFromDocstore) {
-    let owner, ownerFeatures
-    if (!Array.isArray(project.deletedDocs)) {
-      project.deletedDocs = []
-    }
-    project.deletedDocs.forEach(doc => {
-      // The frontend does not use this field.
-      delete doc.deletedAt
-    })
+  buildProjectModelView(
+    project,
+    ownerMember,
+    members,
+    invites,
+    isRestrictedUser
+  ) {
     const result = {
       _id: project._id,
       name: project.name,
@@ -32,24 +25,23 @@ module.exports = ProjectEditorHandler = {
       description: project.description,
       spellCheckLanguage: project.spellCheckLanguage,
       deletedByExternalDataSource: project.deletedByExternalDataSource || false,
-      deletedDocs: mergeDeletedDocs(
-        project.deletedDocs,
-        deletedDocsFromDocstore
-      ),
-      members: [],
-      invites: this.buildInvitesView(invites),
       imageName:
         project.imageName != null
           ? Path.basename(project.imageName)
           : undefined,
     }
 
-    ;({ owner, ownerFeatures, members } =
-      this.buildOwnerAndMembersViews(members))
-    result.owner = owner
-    result.members = members
+    if (isRestrictedUser) {
+      result.owner = { _id: project.owner_ref }
+      result.members = []
+      result.invites = []
+    } else {
+      result.owner = this.buildUserModelView(ownerMember)
+      result.members = members.map(this.buildUserModelView)
+      result.invites = this.buildInvitesView(invites)
+    }
 
-    result.features = _.defaults(ownerFeatures || {}, {
+    result.features = _.defaults(ownerMember?.user?.features || {}, {
       collaborators: -1, // Infinite
       versioning: false,
       dropbox: false,
@@ -78,25 +70,6 @@ module.exports = ProjectEditorHandler = {
     return result
   },
 
-  buildOwnerAndMembersViews(members) {
-    let owner = null
-    let ownerFeatures = null
-    const filteredMembers = []
-    for (const member of members || []) {
-      if (member.privilegeLevel === 'owner') {
-        ownerFeatures = member.user.features
-        owner = this.buildUserModelView(member)
-      } else {
-        filteredMembers.push(this.buildUserModelView(member))
-      }
-    }
-    return {
-      owner,
-      ownerFeatures,
-      members: filteredMembers,
-    }
-  },
-
   buildUserModelView(member) {
     const user = member.user
     return {
@@ -107,6 +80,7 @@ module.exports = ProjectEditorHandler = {
       privileges: member.privilegeLevel,
       signUpDate: user.signUpDate,
       pendingEditor: member.pendingEditor,
+      pendingReviewer: member.pendingReviewer,
     }
   },
 

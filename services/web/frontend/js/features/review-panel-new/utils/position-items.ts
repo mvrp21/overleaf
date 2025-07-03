@@ -1,15 +1,15 @@
-import getMeta from '@/utils/meta'
 import { debounce } from 'lodash'
 
 export const OFFSET_FOR_ENTRIES_ABOVE = 70
-const COLLAPSED_HEADER_HEIGHT = getMeta('ol-isReviewerRoleEnabled') ? 42 : 75
+const COLLAPSED_HEADER_HEIGHT = 42
 const GAP_BETWEEN_ENTRIES = 4
 
 export const positionItems = debounce(
   (
     element: HTMLDivElement,
     previousFocusedItemIndex: number | undefined,
-    docId: string
+    docId: string,
+    newEditor: boolean
   ) => {
     const items = Array.from(
       element.querySelectorAll<HTMLDivElement>('.review-panel-entry')
@@ -42,39 +42,45 @@ export const positionItems = debounce(
       return
     }
 
-    const activeItemTop = getTopPosition(activeItem, activeItemIndex === 0)
+    const activeItemTop = getTopPosition(
+      activeItem,
+      activeItemIndex === 0,
+      newEditor
+    )
 
-    activeItem.style.top = `${activeItemTop}px`
-    activeItem.style.visibility = 'visible'
-    const focusedItemRect = activeItem.getBoundingClientRect()
+    const positions: [HTMLElement, number][] = []
+    positions.push([activeItem, activeItemTop])
 
     // above the active item
     let topLimit = activeItemTop
     for (let i = activeItemIndex - 1; i >= 0; i--) {
       const item = items[i]
-      const rect = item.getBoundingClientRect()
-      let top = getTopPosition(item, i === 0)
-      const bottom = top + rect.height
+      const height = item.offsetHeight
+      let top = getTopPosition(item, i === 0, newEditor)
+      const bottom = top + height
       if (bottom > topLimit) {
-        top = topLimit - rect.height - GAP_BETWEEN_ENTRIES
+        top = topLimit - height - GAP_BETWEEN_ENTRIES
       }
-      item.style.top = `${top}px`
-      item.style.visibility = 'visible'
+      positions.push([item, top])
       topLimit = top
     }
 
     // below the active item
-    let bottomLimit = activeItemTop + focusedItemRect.height
+    let bottomLimit = activeItemTop + activeItem.offsetHeight
     for (let i = activeItemIndex + 1; i < items.length; i++) {
       const item = items[i]
-      const rect = item.getBoundingClientRect()
-      let top = getTopPosition(item, false)
+      const height = item.offsetHeight
+      let top = getTopPosition(item, false, newEditor)
       if (top < bottomLimit) {
         top = bottomLimit + GAP_BETWEEN_ENTRIES
       }
+      positions.push([item, top])
+      bottomLimit = top + height
+    }
+
+    for (const [item, top] of positions) {
       item.style.top = `${top}px`
       item.style.visibility = 'visible'
-      bottomLimit = top + rect.height
     }
 
     return {
@@ -86,7 +92,16 @@ export const positionItems = debounce(
   { leading: false, trailing: true, maxWait: 1000 }
 )
 
-function getTopPosition(item: HTMLDivElement, isFirstEntry: boolean) {
+function getTopPosition(
+  item: HTMLDivElement,
+  isFirstEntry: boolean,
+  newEditor: boolean
+) {
   const offset = isFirstEntry ? 0 : OFFSET_FOR_ENTRIES_ABOVE
+
+  if (newEditor) {
+    return Math.max(offset, Number(item.dataset.top))
+  }
+
   return Math.max(COLLAPSED_HEADER_HEIGHT + offset, Number(item.dataset.top))
 }

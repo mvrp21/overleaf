@@ -9,24 +9,30 @@ const logger = require('@overleaf/logger')
 const Errors = require('../Errors/Errors')
 const SubscriptionErrors = require('./Errors')
 const { callbackify } = require('@overleaf/promise-utils')
+const RecurlyMetrics = require('./RecurlyMetrics')
 
 /**
- * @param accountId
- * @param newEmail
+ * Updates the email address of a Recurly account
+ *
+ * @param userId
+ * @param newAccountEmail - the new email address to set for the Recurly account
  */
-async function updateAccountEmailAddress(accountId, newEmail) {
+async function updateAccountEmailAddress(userId, newAccountEmail) {
   const data = {
-    email: newEmail,
+    email: newAccountEmail,
   }
   let requestBody
   try {
     requestBody = RecurlyWrapper._buildXml('account', data)
   } catch (error) {
-    throw OError.tag(error, 'error building xml', { accountId, newEmail })
+    throw OError.tag(error, 'error building xml', {
+      accountId: userId,
+      newEmail: newAccountEmail,
+    })
   }
 
   const { body } = await RecurlyWrapper.promises.apiRequest({
-    url: `accounts/${accountId}`,
+    url: `accounts/${userId}`,
     method: 'PUT',
     body: requestBody,
   })
@@ -412,9 +418,15 @@ const promises = {
     }
 
     try {
-      return await fetchStringWithResponse(fetchUrl, fetchOptions)
+      const { body, response } = await fetchStringWithResponse(
+        fetchUrl,
+        fetchOptions
+      )
+      RecurlyMetrics.recordMetricsFromResponse(response)
+      return { body, response }
     } catch (error) {
       if (error instanceof RequestFailedError) {
+        RecurlyMetrics.recordMetricsFromResponse(error.response)
         if (error.response.status === 404 && expect404) {
           return { response: error.response, body: null }
         } else if (error.response.status === 422 && expect422) {
@@ -546,27 +558,6 @@ const promises = {
   },
 
   updateAccountEmailAddress,
-
-  async getAccountActiveCoupons(accountId) {
-    const { body } = await RecurlyWrapper.promises.apiRequest({
-      url: `accounts/${accountId}/redemptions`,
-    })
-
-    const redemptions = await RecurlyWrapper.promises._parseRedemptionsXml(body)
-
-    const activeRedemptions = redemptions.filter(
-      redemption => redemption.state === 'active'
-    )
-    const couponCodes = activeRedemptions.map(
-      redemption => redemption.coupon_code
-    )
-
-    return await Promise.all(
-      couponCodes.map(couponCode =>
-        RecurlyWrapper.promises.getCoupon(couponCode)
-      )
-    )
-  },
 
   async getCoupon(couponCode) {
     const opts = { url: `coupons/${couponCode}` }
@@ -702,12 +693,15 @@ const promises = {
     }
   },
 
-  async extendTrial(subscriptionId, daysUntilExpire) {
+  async extendTrial(subscriptionId, trialEndsAt, daysUntilExpire) {
     if (daysUntilExpire == null) {
       daysUntilExpire = 7
     }
+    if (trialEndsAt == null) {
+      trialEndsAt = new Date()
+    }
     const nextRenewalDate = new Date()
-    nextRenewalDate.setDate(nextRenewalDate.getDate() + daysUntilExpire)
+    nextRenewalDate.setDate(trialEndsAt.getDate() + daysUntilExpire)
     logger.debug(
       { subscriptionId, daysUntilExpire },
       'Exending Free trial for user'
@@ -904,7 +898,6 @@ const RecurlyWrapper = {
   _buildXml,
   _parseXml: callbackify(promises._parseXml),
   createFixedAmountCoupon: callbackify(promises.createFixedAmountCoupon),
-  getAccountActiveCoupons: callbackify(promises.getAccountActiveCoupons),
   getBillingInfo: callbackify(promises.getBillingInfo),
   getPaginatedEndpoint: callbackify(promises.getPaginatedEndpoint),
   getSubscription: callbackify(promises.getSubscription),

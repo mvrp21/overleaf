@@ -83,6 +83,21 @@ test_unit_app:
 	$(DOCKER_COMPOSE) run --name unit_test_$(BUILD_DIR_NAME) --rm test_unit
 	$(DOCKER_COMPOSE) down -v -t 0
 
+test_unit_mocha: export COMPOSE_PROJECT_NAME=unit_test_mocha_$(BUILD_DIR_NAME)
+test_unit_mocha:
+	$(DOCKER_COMPOSE) run --rm test_unit npm run test:unit:mocha
+	$(DOCKER_COMPOSE) down -v -t 0
+
+test_unit_esm: export COMPOSE_PROJECT_NAME=unit_test_esm_$(BUILD_DIR_NAME)
+test_unit_esm:
+	$(DOCKER_COMPOSE) run --rm test_unit npm run test:unit:esm
+	$(DOCKER_COMPOSE) down -v -t 0
+
+test_unit_esm_watch: export COMPOSE_PROJECT_NAME=unit_test_esm_watch_$(BUILD_DIR_NAME)
+test_unit_esm_watch:
+	$(DOCKER_COMPOSE) run --rm test_unit npm run test:unit:esm:watch
+	$(DOCKER_COMPOSE) down -v -t 0
+
 TEST_SUITES = $(sort $(filter-out \
 	$(wildcard test/unit/src/helpers/*), \
 	$(wildcard test/unit/src/*/*)))
@@ -440,11 +455,18 @@ format: format_styles
 format_styles:
 	npm run --silent format:styles
 
+format: format_pug
+format_pug:
+	npm run --silent format:pug
+
 format_fix:
 	npm run --silent format:fix
 
 format_styles_fix:
 	npm run --silent format:styles:fix
+
+format_pug_fix:
+	npm run --silent format:pug:fix
 
 format_in_docker:
 	$(RUN_LINT_FORMAT) make format -j2 --output-sync

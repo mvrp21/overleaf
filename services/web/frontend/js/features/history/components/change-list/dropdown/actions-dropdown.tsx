@@ -2,27 +2,22 @@ import React, { ReactNode } from 'react'
 import {
   Dropdown,
   DropdownMenu,
+  DropdownToggle,
 } from '@/features/ui/components/bootstrap-5/dropdown-menu'
-import BS5DropdownToggleWithTooltip from '@/features/ui/components/bootstrap-5/dropdown-toggle-with-tooltip'
+import OLTooltip from '@/features/ui/components/ol/ol-tooltip'
 
 type ActionDropdownProps = {
   id: string
   children: React.ReactNode
-  parentSelector?: string
   isOpened: boolean
   iconTag: ReactNode
-  toolTipDescription: string
+  tooltipDescription: string
   setIsOpened: (isOpened: boolean) => void
 }
 
-function BS5ActionsDropdown({
-  id,
-  children,
-  isOpened,
-  iconTag,
-  setIsOpened,
-  toolTipDescription,
-}: Omit<ActionDropdownProps, 'parentSelector'>) {
+function ActionsDropdown(props: ActionDropdownProps) {
+  const { id, children, isOpened, iconTag, setIsOpened, tooltipDescription } =
+    props
   return (
     <Dropdown
       align="end"
@@ -30,25 +25,28 @@ function BS5ActionsDropdown({
       show={isOpened}
       onToggle={open => setIsOpened(open)}
     >
-      <BS5DropdownToggleWithTooltip
+      <OLTooltip
         id={`history-version-dropdown-${id}`}
-        className="history-version-dropdown-menu-btn"
-        aria-label={toolTipDescription}
-        toolTipDescription={toolTipDescription}
-        overlayTriggerProps={{ placement: 'bottom' }}
-        tooltipProps={{ hidden: isOpened }}
+        description={tooltipDescription}
+        overlayProps={{ placement: 'bottom' }}
+        hidden={isOpened}
       >
-        {iconTag}
-      </BS5DropdownToggleWithTooltip>
+        {/* OverlayTrigger won't fire unless the child is a non-react html element (e.g div, span) */}
+        <span>
+          <DropdownToggle
+            id={`history-version-dropdown-toggle-${id}`}
+            className="history-version-dropdown-menu-btn"
+            as="button"
+          >
+            {iconTag}
+          </DropdownToggle>
+        </span>
+      </OLTooltip>
       <DropdownMenu className="history-version-dropdown-menu">
         {children}
       </DropdownMenu>
     </Dropdown>
   )
-}
-
-function ActionsDropdown(props: ActionDropdownProps) {
-  return <BS5ActionsDropdown {...props} />
 }
 
 export default ActionsDropdown

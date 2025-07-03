@@ -93,9 +93,11 @@ const createInitialValue = () =>
     pdfPreviewOpen: false,
     projectSearchIsOpen: true,
     setProjectSearchIsOpen: cy.stub(),
+    openFile: null,
+    setOpenFile: cy.stub(),
   }) satisfies LayoutContextValue
 
-const LayoutProvider: FC = ({ children }) => {
+const LayoutProvider: FC<React.PropsWithChildren> = ({ children }) => {
   const [value] = useState(createInitialValue)
 
   return (

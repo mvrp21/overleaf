@@ -35,7 +35,7 @@ import importOverleafModules from '../../../../macros/import-overleaf-module.mac
 import { emptyLineFiller } from './empty-line-filler'
 import { goToLinePanel } from './go-to-line'
 import { drawSelection } from './draw-selection'
-import { visual } from './visual/visual'
+import { sourceOnly, visual } from './visual/visual'
 import { inlineBackground } from './inline-background'
 import { indentationMarkers } from './indentation-markers'
 import { codemirrorDevTools } from '../languages/latex/codemirror-dev-tools'
@@ -50,6 +50,7 @@ import { docName } from './doc-name'
 import { fileTreeItemDrop } from './file-tree-item-drop'
 import { mathPreview } from './math-preview'
 import { ranges } from './ranges'
+import { historyOT } from './history-ot'
 import { trackDetachedComments } from './track-detached-comments'
 import { reviewTooltip } from './review-tooltip'
 
@@ -77,6 +78,10 @@ export const createExtensions = (options: Record<string, any>): Extension[] => [
   EditorState.allowMultipleSelections.of(true),
   // A built-in extension that enables soft line wrapping.
   EditorView.lineWrapping,
+  sourceOnly(
+    options.visual,
+    EditorView.contentAttributes.of({ 'aria-label': 'Source Editor editing' })
+  ),
   // A built-in extension that re-indents input if the language defines an indentOnInput field in its language data.
   indentOnInput(),
   lineWrappingIndentation(options.visual.visual),
@@ -142,13 +147,15 @@ export const createExtensions = (options: Record<string, any>): Extension[] => [
   // NOTE: `emptyLineFiller` needs to be before `trackChanges`,
   // so the decorations are added in the correct order.
   emptyLineFiller(),
-  ranges(),
+  options.currentDoc.currentDocument.getType() === 'history-ot'
+    ? historyOT(options.currentDoc.currentDocument)
+    : ranges(),
   trackDetachedComments(options.currentDoc),
   visual(options.visual),
   mathPreview(options.settings.mathPreview),
   reviewTooltip(),
   toolbarPanel(),
-  breadcrumbPanel(options.settings.enableNewEditor),
+  breadcrumbPanel(),
   verticalOverflow(),
   highlightActiveLine(options.visual.visual),
   // The built-in extension that highlights the active line in the gutter.

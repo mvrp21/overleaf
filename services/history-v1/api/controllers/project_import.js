@@ -2,6 +2,7 @@
 
 'use strict'
 
+const config = require('config')
 const { expressify } = require('@overleaf/promise-utils')
 
 const HTTPStatus = require('http-status')
@@ -21,10 +22,15 @@ const BatchBlobStore = storage.BatchBlobStore
 const BlobStore = storage.BlobStore
 const chunkStore = storage.chunkStore
 const HashCheckBlobStore = storage.HashCheckBlobStore
-const persistChanges = storage.persistChanges
+const commitChanges = storage.commitChanges
+const persistBuffer = storage.persistBuffer
 const InvalidChangeError = storage.InvalidChangeError
 
 const render = require('./render')
+const Rollout = require('../app/rollout')
+
+const rollout = new Rollout(config)
+rollout.report(logger) // display the rollout configuration in the logs
 
 async function importSnapshot(req, res) {
   const projectId = req.swagger.params.project_id.value
@@ -35,6 +41,7 @@ async function importSnapshot(req, res) {
   try {
     snapshot = Snapshot.fromRaw(rawSnapshot)
   } catch (err) {
+    logger.warn({ err, projectId }, 'failed to import snapshot')
     return render.unprocessableEntity(res)
   }
 
@@ -43,6 +50,7 @@ async function importSnapshot(req, res) {
     historyId = await chunkStore.initializeProject(projectId, snapshot)
   } catch (err) {
     if (err instanceof chunkStore.AlreadyInitialized) {
+      logger.warn({ err, projectId }, 'already initialized')
       return render.conflict(res)
     } else {
       throw err
@@ -95,7 +103,9 @@ async function importChanges(req, res, next) {
   }
 
   async function buildResultSnapshot(resultChunk) {
-    const chunk = resultChunk || (await chunkStore.loadLatest(projectId))
+    const chunk =
+      resultChunk ||
+      (await chunkStore.loadLatest(projectId, { persistedOnly: true }))
     const snapshot = chunk.getSnapshot()
     snapshot.applyAll(chunk.getChanges())
     const rawSnapshot = await snapshot.store(hashCheckBlobStore)
@@ -106,7 +116,12 @@ async function importChanges(req, res, next) {
 
   let result
   try {
-    result = await persistChanges(projectId, changes, limits, endVersion)
+    const { historyBufferLevel, forcePersistBuffer } =
+      rollout.getHistoryBufferLevelOptions(projectId)
+    result = await commitChanges(projectId, changes, limits, endVersion, {
+      historyBufferLevel,
+      forcePersistBuffer,
+    })
   } catch (err) {
     if (
       err instanceof Chunk.ConflictingEndVersion ||
@@ -130,12 +145,38 @@ async function importChanges(req, res, next) {
   }
 
   if (returnSnapshot === 'none') {
-    res.status(HTTPStatus.CREATED).json({})
+    res.status(HTTPStatus.CREATED).json({
+      resyncNeeded: result.resyncNeeded,
+    })
   } else {
     const rawSnapshot = await buildResultSnapshot(result && result.currentChunk)
     res.status(HTTPStatus.CREATED).json(rawSnapshot)
   }
 }
 
+async function flushChanges(req, res, next) {
+  const projectId = req.swagger.params.project_id.value
+  // Use the same limits importChanges, since these are passed to persistChanges
+  const farFuture = new Date()
+  farFuture.setTime(farFuture.getTime() + 7 * 24 * 3600 * 1000)
+  const limits = {
+    maxChanges: 0,
+    minChangeTimestamp: farFuture,
+    maxChangeTimestamp: farFuture,
+    autoResync: true,
+  }
+  try {
+    await persistBuffer(projectId, limits)
+    res.status(HTTPStatus.OK).end()
+  } catch (err) {
+    if (err instanceof Chunk.NotFoundError) {
+      render.notFound(res)
+    } else {
+      throw err
+    }
+  }
+}
+
 exports.importSnapshot = expressify(importSnapshot)
 exports.importChanges = expressify(importChanges)
+exports.flushChanges = expressify(flushChanges)

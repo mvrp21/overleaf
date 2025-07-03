@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { sendMB } from '@/infrastructure/event-tracking'
 import { useTranslation } from 'react-i18next'
-import { Button, Container, Nav, Navbar } from 'react-bootstrap-5'
+import { Button, Container, Nav, Navbar } from 'react-bootstrap'
 import useWaitForI18n from '@/shared/hooks/use-wait-for-i18n'
 import AdminMenu from '@/features/ui/components/bootstrap-5/navbar/admin-menu'
 import type { DefaultNavbarMetadata } from '@/features/ui/components/types/default-navbar-metadata'
@@ -13,15 +13,22 @@ import MaterialIcon from '@/shared/components/material-icon'
 import { useContactUsModal } from '@/shared/hooks/use-contact-us-modal'
 import { UserProvider } from '@/shared/context/user-context'
 import { X } from '@phosphor-icons/react'
+import overleafWhiteLogo from '@/shared/svgs/overleaf-white.svg'
+import overleafBlackLogo from '@/shared/svgs/overleaf-black.svg'
+import type { CSSPropertiesWithVariables } from '../../../../../../../types/css-properties-with-variables'
 
-function DefaultNavbar(props: DefaultNavbarMetadata) {
+function DefaultNavbar(
+  props: DefaultNavbarMetadata & { overleafLogo?: string }
+) {
   const {
+    overleafLogo,
     customLogo,
     title,
     canDisplayAdminMenu,
     canDisplayAdminRedirect,
     canDisplaySplitTestMenu,
     canDisplaySurveyMenu,
+    canDisplayScriptLogMenu,
     enableUpgradeButton,
     suppressNavbarRight,
     suppressNavContentLinks,
@@ -33,19 +40,14 @@ function DefaultNavbar(props: DefaultNavbarMetadata) {
     items,
   } = props
   const { t } = useTranslation()
-  const { isReady } = useWaitForI18n()
   const [expanded, setExpanded] = useState(false)
 
-  // The Contact Us modal is rendered at this level rather than inside the nav
+  // The Contact us modal is rendered at this level rather than inside the nav
   // bar because otherwise the help wiki search results dropdown doesn't show up
   const { modal: contactUsModal, showModal: showContactUsModal } =
     useContactUsModal({
       autofillProjectUrl: false,
     })
-
-  if (!isReady) {
-    return null
-  }
 
   return (
     <>
@@ -53,10 +55,20 @@ function DefaultNavbar(props: DefaultNavbarMetadata) {
         className="navbar-default navbar-main"
         expand="lg"
         onToggle={expanded => setExpanded(expanded)}
+        style={
+          {
+            '--navbar-brand-image-default-url': `url("${overleafWhiteLogo}")`,
+            '--navbar-brand-image-redesign-url': `url("${overleafBlackLogo}")`,
+          } as CSSPropertiesWithVariables
+        }
       >
         <Container className="navbar-container" fluid>
           <div className="navbar-header">
-            <HeaderLogoOrTitle title={title} customLogo={customLogo} />
+            <HeaderLogoOrTitle
+              title={title}
+              overleafLogo={overleafLogo}
+              customLogo={customLogo}
+            />
             {enableUpgradeButton ? (
               <Button
                 as="a"
@@ -101,6 +113,7 @@ function DefaultNavbar(props: DefaultNavbarMetadata) {
                       canDisplayAdminRedirect={canDisplayAdminRedirect}
                       canDisplaySplitTestMenu={canDisplaySplitTestMenu}
                       canDisplaySurveyMenu={canDisplaySurveyMenu}
+                      canDisplayScriptLogMenu={canDisplayScriptLogMenu}
                       adminUrl={adminUrl}
                     />
                   ) : null}
@@ -138,6 +151,16 @@ function DefaultNavbar(props: DefaultNavbarMetadata) {
       <UserProvider>{contactUsModal}</UserProvider>
     </>
   )
+}
+
+export const DefaultNavbarRoot = (props: DefaultNavbarMetadata) => {
+  const { isReady } = useWaitForI18n()
+
+  if (!isReady) {
+    return null
+  }
+
+  return <DefaultNavbar {...props} />
 }
 
 export default DefaultNavbar

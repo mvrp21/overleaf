@@ -1,4 +1,7 @@
+import { sendSearchEvent } from '@/features/event-tracking/search-events'
 import useCollapsiblePanel from '@/features/ide-react/hooks/use-collapsible-panel'
+import useEventListener from '@/shared/hooks/use-event-listener'
+import { isMac } from '@/shared/utils/os'
 import {
   createContext,
   Dispatch,
@@ -18,13 +21,13 @@ export type RailTabKey =
   | 'review-panel'
   | 'chat'
   | 'errors'
+  | 'full-project-search'
 
 export type RailModalKey = 'keyboard-shortcuts' | 'contact-us' | 'dictionary'
 
 const RailContext = createContext<
   | {
       selectedTab: RailTabKey
-      setSelectedTab: Dispatch<SetStateAction<RailTabKey>>
       isOpen: boolean
       setIsOpen: Dispatch<SetStateAction<boolean>>
       panelRef: React.RefObject<ImperativePanelHandle>
@@ -35,11 +38,12 @@ const RailContext = createContext<
       setResizing: Dispatch<SetStateAction<boolean>>
       activeModal: RailModalKey | null
       setActiveModal: Dispatch<SetStateAction<RailModalKey | null>>
+      openTab: (tab: RailTabKey) => void
     }
   | undefined
 >(undefined)
 
-export const RailProvider: FC = ({ children }) => {
+export const RailProvider: FC<React.PropsWithChildren> = ({ children }) => {
   const [isOpen, setIsOpen] = useState(true)
   const [resizing, setResizing] = useState(false)
   const [activeModal, setActiveModalInternal] = useState<RailModalKey | null>(
@@ -69,10 +73,49 @@ export const RailProvider: FC = ({ children }) => {
   //       since it is responsible for opening the initial document.
   const [selectedTab, setSelectedTab] = useState<RailTabKey>('file-tree')
 
+  const openTab = useCallback(
+    (tab: RailTabKey) => {
+      setSelectedTab(tab)
+      setIsOpen(true)
+    },
+    [setIsOpen, setSelectedTab]
+  )
+
+  useEventListener(
+    'ui.toggle-review-panel',
+    useCallback(() => {
+      if (isOpen && selectedTab === 'review-panel') {
+        handlePaneCollapse()
+      } else {
+        openTab('review-panel')
+      }
+    }, [handlePaneCollapse, selectedTab, isOpen, openTab])
+  )
+
+  useEventListener(
+    'keydown',
+    useCallback(
+      (event: KeyboardEvent) => {
+        if (
+          (isMac ? event.metaKey : event.ctrlKey) &&
+          event.shiftKey &&
+          event.code === 'KeyF'
+        ) {
+          event.preventDefault()
+          sendSearchEvent('search-open', {
+            searchType: 'full-project',
+            method: 'keyboard',
+          })
+          openTab('full-project-search')
+        }
+      },
+      [openTab]
+    )
+  )
+
   const value = useMemo(
     () => ({
       selectedTab,
-      setSelectedTab,
       isOpen,
       setIsOpen,
       panelRef,
@@ -83,10 +126,10 @@ export const RailProvider: FC = ({ children }) => {
       setResizing,
       activeModal,
       setActiveModal,
+      openTab,
     }),
     [
       selectedTab,
-      setSelectedTab,
       isOpen,
       setIsOpen,
       panelRef,
@@ -97,6 +140,7 @@ export const RailProvider: FC = ({ children }) => {
       setResizing,
       activeModal,
       setActiveModal,
+      openTab,
     ]
   )
 

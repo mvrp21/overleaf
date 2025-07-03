@@ -5,7 +5,7 @@ import fetchMock from 'fetch-mock'
 
 describe('<SecuritySection />', function () {
   afterEach(function () {
-    fetchMock.reset()
+    fetchMock.removeRoutes().clearHistory()
   })
 
   it('shows Group SSO rows in security section', async function () {
@@ -22,7 +22,7 @@ describe('<SecuritySection />', function () {
     render(<SecuritySection />)
 
     expect(screen.getAllByText('Single Sign-On (SSO)').length).to.equal(2)
-    const link = screen.getByRole('button', {
+    const link = screen.getByRole('link', {
       name: /Set up SSO/i,
     })
     expect(link).to.exist

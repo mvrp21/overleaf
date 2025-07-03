@@ -97,6 +97,7 @@ const UserSchema = new Schema(
       fontFamily: { type: String },
       lineHeight: { type: String },
       mathPreview: { type: Boolean, default: true },
+      breadcrumbs: { type: Boolean, default: true },
       referencesSearchMode: { type: String, default: 'advanced' }, // 'advanced' or 'simple'
       enableNewEditor: { type: Boolean },
     },
@@ -196,6 +197,7 @@ const UserSchema = new Schema(
       enabled: { type: Boolean, default: null },
       autoCreatedAccount: { type: Boolean, default: false },
       isPremium: { type: Boolean, default: false },
+      premiumSource: { type: String, default: null },
     },
     aiErrorAssistant: {
       enabled: { type: Boolean, default: true },
@@ -203,6 +205,7 @@ const UserSchema = new Schema(
     alphaProgram: { type: Boolean, default: false }, // experimental features
     betaProgram: { type: Boolean, default: false },
     labsProgram: { type: Boolean, default: false },
+    labsExperiments: { type: Array, default: [] },
     overleaf: {
       id: { type: Number },
       accessToken: { type: String },

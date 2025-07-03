@@ -1,7 +1,6 @@
 import GroupMembers from '@/features/group-management/components/group-members'
 import { GroupMembersProvider } from '@/features/group-management/context/group-members-context'
 import { User } from '../../../../../types/group-management/user'
-import { SplitTestProvider } from '@/shared/context/split-test-context'
 
 const GROUP_ID = '777fff777fff'
 const PATHS = {
@@ -14,11 +13,9 @@ const PATHS = {
 describe('GroupMembers', function () {
   function mountGroupMembersProvider() {
     cy.mount(
-      <SplitTestProvider>
-        <GroupMembersProvider>
-          <GroupMembers />
-        </GroupMembersProvider>
-      </SplitTestProvider>
+      <GroupMembersProvider>
+        <GroupMembers />
+      </GroupMembersProvider>
     )
   }
 
@@ -49,11 +46,9 @@ describe('GroupMembers', function () {
       })
 
       cy.mount(
-        <SplitTestProvider>
-          <GroupMembersProvider>
-            <GroupMembers />
-          </GroupMembersProvider>
-        </SplitTestProvider>
+        <GroupMembersProvider>
+          <GroupMembers />
+        </GroupMembersProvider>
       )
     })
 
@@ -517,9 +512,6 @@ describe('GroupMembers', function () {
         win.metaAttributesCache.set('ol-groupId', GROUP_ID)
         win.metaAttributesCache.set('ol-groupName', 'My Awesome Team')
         win.metaAttributesCache.set('ol-groupSize', 10)
-        win.metaAttributesCache.set('ol-splitTestVariants', {
-          'flexible-group-licensing': 'enabled',
-        })
         win.metaAttributesCache.set('ol-canUseFlexibleLicensing', true)
         win.metaAttributesCache.set('ol-canUseAddSeatsFeature', true)
       })
@@ -534,15 +526,13 @@ describe('GroupMembers', function () {
       })
 
       cy.mount(
-        <SplitTestProvider>
-          <GroupMembersProvider>
-            <GroupMembers />
-          </GroupMembersProvider>
-        </SplitTestProvider>
+        <GroupMembersProvider>
+          <GroupMembers />
+        </GroupMembersProvider>
       )
 
       cy.findByTestId('group-size-details').contains(
-        'You have 2 users and your plan supports up to 10. Add more users.'
+        'You have 2 licenses and your plan supports up to 10. Buy more licenses.'
       )
       cy.findByTestId('add-more-members-form').within(() => {
         cy.contains('Invite more members')
@@ -556,35 +546,31 @@ describe('GroupMembers', function () {
       })
 
       cy.mount(
-        <SplitTestProvider>
-          <GroupMembersProvider>
-            <GroupMembers />
-          </GroupMembersProvider>
-        </SplitTestProvider>
+        <GroupMembersProvider>
+          <GroupMembers />
+        </GroupMembersProvider>
       )
 
       cy.findByTestId('group-size-details').contains(
-        'You have 1 user and your plan supports up to 10. Add more users.'
+        'You have 1 license and your plan supports up to 10. Buy more licenses.'
       )
     })
 
-    it('renders the group members page without "add more users" link when not admin', function () {
+    it('renders the group members page without "buy more licenses" link when not admin', function () {
       cy.window().then(win => {
         win.metaAttributesCache.set('ol-users', [this.JOHN_DOE])
         win.metaAttributesCache.set('ol-canUseAddSeatsFeature', false)
       })
 
       cy.mount(
-        <SplitTestProvider>
-          <GroupMembersProvider>
-            <GroupMembers />
-          </GroupMembersProvider>
-        </SplitTestProvider>
+        <GroupMembersProvider>
+          <GroupMembers />
+        </GroupMembersProvider>
       )
 
       cy.findByTestId('group-size-details').within(() => {
-        cy.findByText(/you have \d+ user and your plan supports up to \d+/i)
-        cy.findByText(/add more users/i).should('not.exist')
+        cy.findByText(/you have \d+ license and your plan supports up to \d+/i)
+        cy.findByText(/buy more licenses/i).should('not.exist')
       })
     })
   })

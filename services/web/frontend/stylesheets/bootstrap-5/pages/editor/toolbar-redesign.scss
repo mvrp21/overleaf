@@ -35,16 +35,23 @@
   justify-content: space-between;
   box-sizing: border-box;
   height: $toolbar-height;
+  padding: 0 var(--spacing-02);
+  gap: var(--spacing-05);
 
   .ide-redesign-toolbar-menu {
     display: flex;
     gap: var(--spacing-05);
   }
 
+  .ide-redesign-toolbar-menu,
+  .ide-redesign-toolbar-actions {
+    flex: 0 0 auto;
+  }
+
   .ide-redesign-toolbar-home-button {
     width: $home-button-size;
     height: $home-button-size;
-    margin: math.div($toolbar-height - $home-button-size, 2);
+    margin: math.div($toolbar-height - $home-button-size, 2) 0;
   }
 
   .ide-redesign-toolbar-button-subdued {
@@ -58,6 +65,27 @@
     );
 
     text-decoration: none;
+
+    &.ide-redesign-toolbar-button-icon {
+      @include ol-button-variant(
+        var(--redesign-subdued-button-color),
+        var(--redesign-toolbar-background),
+        transparent,
+        var(--redesign-subdued-button-hover-background),
+        transparent,
+        true
+      );
+
+      border-radius: var(--border-radius-full);
+      display: flex;
+      justify-content: center;
+      padding: var(--spacing-02);
+
+      &:visited,
+      &:focus {
+        color: var(--redesign-subdued-button-color);
+      }
+    }
   }
 
   .ide-redesign-toolbar-home-link {
@@ -120,6 +148,36 @@
       vertical-align: middle;
     }
   }
+
+  .ide-redesign-toolbar-logos {
+    display: flex;
+  }
+
+  .ide-redesign-toolbar-cobranding-separator {
+    $separator-height: 16px;
+
+    border-radius: var(--border-radius-base);
+    width: 1px;
+    height: $separator-height;
+    margin-top: math.div($toolbar-height - $separator-height, 2);
+
+    // To account for the 1px border of the rail so that they're aligned.
+    margin-left: calc(var(--spacing-02) - 1px);
+    margin-right: var(--spacing-01);
+    background: var(--redesign-toolbar-border-divider);
+  }
+
+  .ide-redesign-toolbar-cobranding-link {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 var(--spacing-02);
+  }
+
+  .ide-redesign-toolbar-cobranding-logo {
+    max-height: calc($toolbar-height - var(--spacing-04) * 2);
+    max-width: 150px;
+  }
 }
 
 .ide-redesign-toolbar-menu-bar {
@@ -132,7 +190,7 @@
 .ide-redesign-toolbar-actions {
   display: flex;
   gap: var(--spacing-04);
-  padding: 0 var(--spacing-05);
+  padding-left: var(--spacing-05);
 }
 
 .ide-redesign-toolbar-button-container {
@@ -160,13 +218,22 @@
   }
 }
 
-.ide-redesign-labs-button.btn.btn-info {
-  @include ol-button-variant(
-    var(--content-positive),
-    var(--bg-accent-03),
-    var(--green-40),
-    var(--bg-accent-03),
-    var(--green-40),
-    false
-  );
+.ide-redesign-toolbar-project-dropdown {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.ide-redesign-toolbar-project-dropdown-toggle {
+  display: flex;
+  max-width: 100%;
+}
+
+.ide-redesign-toolbar-project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ide-redesign-labs-button.btn.btn-secondary {
+  @include labs-button;
 }

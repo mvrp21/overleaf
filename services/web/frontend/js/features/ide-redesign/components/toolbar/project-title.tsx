@@ -13,11 +13,13 @@ import { DownloadProjectPDF, DownloadProjectZip } from './download-project'
 import { useCallback, useState } from 'react'
 import OLDropdownMenuItem from '@/features/ui/components/ol/ol-dropdown-menu-item'
 import EditableLabel from './editable-label'
+import { DuplicateProject } from './duplicate-project'
 
 const [publishModalModules] = importOverleafModules('publishModal')
-const SubmitProjectButton = publishModalModules?.import.NewPublishToolbarButton
+const SubmitProjectButton = publishModalModules?.import.NewPublishDropdownButton
 
 export const ToolbarProjectTitle = () => {
+  const { cobranding } = useEditorContext()
   const { t } = useTranslation()
   const { permissionsLevel, renameProject } = useEditorContext()
   const { name } = useProjectContext()
@@ -27,7 +29,7 @@ export const ToolbarProjectTitle = () => {
   const hasRenamePermissions = permissionsLevel === 'owner'
   const [isRenaming, setIsRenaming] = useState(false)
   const onRename = useCallback(
-    name => {
+    (name: string) => {
       if (name) {
         renameProject(name)
       }
@@ -52,19 +54,21 @@ export const ToolbarProjectTitle = () => {
   }
 
   return (
-    <Dropdown align="start">
+    <Dropdown align="start" className="ide-redesign-toolbar-project-dropdown">
       <DropdownToggle
         id="project-title-options"
-        className="ide-redesign-toolbar-dropdown-toggle-subdued fw-bold  ide-redesign-toolbar-button-subdued"
+        className="ide-redesign-toolbar-project-dropdown-toggle ide-redesign-toolbar-dropdown-toggle-subdued fw-bold ide-redesign-toolbar-button-subdued"
       >
-        {name}
+        <span className="ide-redesign-toolbar-project-name" translate="no">
+          {name}
+        </span>
         <MaterialIcon
           type="keyboard_arrow_down"
           accessibilityLabel={t('project_title_options')}
         />
       </DropdownToggle>
       <DropdownMenu renderOnMount>
-        {shouldDisplaySubmitButton && (
+        {shouldDisplaySubmitButton && !cobranding && (
           <>
             <SubmitProjectButton />
             <DropdownDivider />
@@ -73,6 +77,7 @@ export const ToolbarProjectTitle = () => {
         <DownloadProjectPDF />
         <DownloadProjectZip />
         <DropdownDivider />
+        <DuplicateProject />
         <OLDropdownMenuItem
           onClick={() => {
             setIsRenaming(true)

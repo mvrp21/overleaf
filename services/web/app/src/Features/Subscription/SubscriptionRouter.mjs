@@ -19,10 +19,12 @@ const subscriptionRateLimiter = new RateLimiter('subscription', {
 })
 
 const MAX_NUMBER_OF_USERS = 20
+const MAX_NUMBER_OF_PO_NUMBER_CHARACTERS = 50
 
 const addSeatsValidateSchema = {
   body: Joi.object({
     adding: Joi.number().integer().min(1).max(MAX_NUMBER_OF_USERS).required(),
+    poNumber: Joi.string().max(MAX_NUMBER_OF_PO_NUMBER_CHARACTERS),
   }),
 }
 
@@ -54,13 +56,6 @@ export default {
       SubscriptionController.canceledSubscription
     )
 
-    webRouter.get(
-      '/user/subscription/recurly/:pageType',
-      AuthenticationController.requireLogin(),
-      RateLimiterMiddleware.rateLimit(subscriptionRateLimiter),
-      SubscriptionController.redirectToHostedPage
-    )
-
     webRouter.delete(
       '/subscription/group/user',
       AuthenticationController.requireLogin(),
@@ -73,7 +68,6 @@ export default {
       '/user/subscription/group/add-users',
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(subscriptionRateLimiter),
-      SubscriptionGroupController.flexibleLicensingSplitTest,
       SubscriptionGroupController.addSeatsToGroupSubscription
     )
 
@@ -98,6 +92,7 @@ export default {
       validate({
         body: Joi.object({
           adding: Joi.number().integer().min(MAX_NUMBER_OF_USERS).required(),
+          poNumber: Joi.string(),
         }),
       }),
       RateLimiterMiddleware.rateLimit(subscriptionRateLimiter),
@@ -108,7 +103,6 @@ export default {
       '/user/subscription/group/upgrade-subscription',
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(subscriptionRateLimiter),
-      SubscriptionGroupController.flexibleLicensingSplitTest,
       SubscriptionGroupController.subscriptionUpgradePage
     )
 
@@ -123,7 +117,6 @@ export default {
       '/user/subscription/group/missing-billing-information',
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(subscriptionRateLimiter),
-      SubscriptionGroupController.flexibleLicensingSplitTest,
       SubscriptionGroupController.missingBillingInformation
     )
 
@@ -131,7 +124,6 @@ export default {
       '/user/subscription/group/manually-collected-subscription',
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(subscriptionRateLimiter),
-      SubscriptionGroupController.flexibleLicensingSplitTest,
       SubscriptionGroupController.manuallyCollectedSubscription
     )
 
@@ -139,7 +131,6 @@ export default {
       '/user/subscription/group/subtotal-limit-exceeded',
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(subscriptionRateLimiter),
-      SubscriptionGroupController.flexibleLicensingSplitTest,
       SubscriptionGroupController.subtotalLimitExceeded
     )
 

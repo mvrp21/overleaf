@@ -25,6 +25,7 @@ class PromisifiedSubscription {
     this.ssoConfig = options.ssoConfig
     this.groupPolicy = options.groupPolicy
     this.addOns = options.addOns
+    this.paymentProvider = options.paymentProvider
   }
 
   async ensureExists() {
@@ -42,6 +43,18 @@ class PromisifiedSubscription {
 
   async get() {
     return await db.subscriptions.findOne({ _id: new ObjectId(this._id) })
+  }
+
+  async getSSOConfig() {
+    const subscription = await this.get()
+
+    if (!subscription.ssoConfig) {
+      return
+    }
+
+    return await db.ssoConfigs.findOne({
+      _id: new ObjectId(subscription.ssoConfig),
+    })
   }
 
   async getWithGroupPolicy() {
@@ -125,7 +138,11 @@ class PromisifiedSubscription {
     return await Modules.promises.hooks.fire(
       'enrollInManagedSubscription',
       user._id,
-      subscription
+      subscription,
+      {
+        initiatorId: user._id,
+        ipAddress: '0:0:0:0',
+      }
     )
   }
 

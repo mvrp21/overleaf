@@ -6,7 +6,7 @@ version: "2.3"
 
 services:
   test_unit:
-    image: node:20.18.2
+    image: node:22.15.1
     volumes:
       - .:/overleaf/services/chat
       - ../../node_modules:/overleaf/node_modules
@@ -21,11 +21,12 @@ services:
     user: node
 
   test_acceptance:
-    image: node:20.18.2
+    image: node:22.15.1
     volumes:
       - .:/overleaf/services/chat
       - ../../node_modules:/overleaf/node_modules
       - ../../libraries:/overleaf/libraries
+      - ../../bin/shared/wait_for_it:/overleaf/bin/shared/wait_for_it
     working_dir: /overleaf/services/chat
     environment:
       ELASTIC_SEARCH_DSN: es:9200
@@ -39,10 +40,11 @@ services:
     depends_on:
       mongo:
         condition: service_started
+    entrypoint: /overleaf/bin/shared/wait_for_it mongo:27017 --timeout=0 --
     command: npm run --silent test:acceptance
 
   mongo:
-    image: mongo:6.0.13
+    image: mongo:7.0.20
     command: --replSet overleaf
     volumes:
       - ../../bin/shared/mongodb-init-replica-set.js:/docker-entrypoint-initdb.d/mongodb-init-replica-set.js

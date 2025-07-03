@@ -1,3 +1,5 @@
+import logger from '@overleaf/logger'
+import sinon from 'sinon'
 import User from './helpers/User.mjs'
 import Subscription from './helpers/Subscription.mjs'
 import request from './helpers/request.js'
@@ -18,6 +20,8 @@ let MockDocstoreApi,
   MockGitBridgeApi,
   MockHistoryBackupDeletionApi
 
+let spy
+
 before(function () {
   MockDocstoreApi = MockDocstoreApiClass.instance()
   MockFilestoreApi = MockFilestoreApiClass.instance()
@@ -28,6 +32,7 @@ before(function () {
 
 describe('Deleting a user', function () {
   beforeEach(function (done) {
+    spy = sinon.spy(logger, 'info')
     async.auto(
       {
         user: cb => {
@@ -62,6 +67,10 @@ describe('Deleting a user', function () {
         done()
       }
     )
+  })
+
+  afterEach(function () {
+    spy.restore()
   })
 
   it('Should remove the user from active users', function (done) {
@@ -183,6 +192,7 @@ describe('Deleting a user', function () {
 
 describe('Deleting a project', function () {
   beforeEach(function (done) {
+    spy = sinon.spy(logger, 'info')
     this.user = new User()
     this.projectName = 'wombat'
     this.user.ensureUserExists(() => {
@@ -193,6 +203,10 @@ describe('Deleting a project', function () {
         })
       })
     })
+  })
+
+  afterEach(function () {
+    logger.info.restore()
   })
 
   it('Should remove the project from active projects', function (done) {
@@ -252,81 +266,6 @@ describe('Deleting a project', function () {
     })
   })
 
-  describe('when the project has deleted files', function () {
-    beforeEach('get rootFolder id', function (done) {
-      this.user.getProject(this.projectId, (error, project) => {
-        if (error) return done(error)
-        this.rootFolder = project.rootFolder[0]._id
-        done()
-      })
-    })
-
-    let allFileIds
-    beforeEach('reset allFileIds', function () {
-      allFileIds = []
-    })
-    function createAndDeleteFile(name) {
-      let fileId
-      beforeEach(`create file ${name}`, function (done) {
-        this.user.uploadExampleFileInProject(
-          this.projectId,
-          this.rootFolder,
-          name,
-          (error, theFileId) => {
-            fileId = theFileId
-            allFileIds.push(theFileId)
-            done(error)
-          }
-        )
-      })
-      beforeEach(`delete file ${name}`, function (done) {
-        this.user.deleteItemInProject(this.projectId, 'file', fileId, done)
-      })
-    }
-    for (const name of ['a.png', 'another.png']) {
-      createAndDeleteFile(name)
-    }
-
-    it('should have two deleteFiles entries', async function () {
-      const files = await db.deletedFiles
-        .find({}, { sort: { _id: 1 } })
-        .toArray()
-      expect(files).to.have.length(2)
-      expect(files.map(file => file._id.toString())).to.deep.equal(allFileIds)
-    })
-
-    describe('When the deleted project is expired', function () {
-      beforeEach('soft delete the project', function (done) {
-        this.user.deleteProject(this.projectId, done)
-      })
-      beforeEach('hard delete the project', function (done) {
-        request.post(
-          `/internal/project/${this.projectId}/expire-deleted-project`,
-          {
-            auth: {
-              user: settings.apis.web.user,
-              pass: settings.apis.web.pass,
-              sendImmediately: true,
-            },
-          },
-          (error, res) => {
-            expect(error).not.to.exist
-            expect(res.statusCode).to.equal(200)
-
-            done()
-          }
-        )
-      })
-
-      it('should cleanup the deleteFiles', async function () {
-        const files = await db.deletedFiles
-          .find({}, { sort: { _id: 1 } })
-          .toArray()
-        expect(files).to.deep.equal([])
-      })
-    })
-  })
-
   describe('When the project has docs', function () {
     beforeEach(function (done) {
       this.user.getProject(this.projectId, (error, project) => {
@@ -365,6 +304,28 @@ describe('Deleting a project', function () {
           }
           done()
         })
+      })
+
+      it('Should log a successful deletion', function (done) {
+        request.post(
+          `/internal/project/${this.projectId}/expire-deleted-project`,
+          {
+            auth: {
+              user: settings.apis.web.user,
+              pass: settings.apis.web.pass,
+              sendImmediately: true,
+            },
+          },
+          (error, res) => {
+            expect(error).not.to.exist
+            expect(res.statusCode).to.equal(200)
+            expect(spy).to.have.been.calledWithMatch(
+              { projectId: this.projectId, userId: this.user._id },
+              'expired deleted project successfully'
+            )
+            done()
+          }
+        )
       })
 
       it('Should destroy the docs', function (done) {

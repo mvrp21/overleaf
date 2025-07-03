@@ -5,11 +5,11 @@ import { v4 as uuid } from 'uuid'
 export function createProject(
   name: string,
   {
-    type = 'Blank Project',
+    type = 'Blank project',
     newProjectButtonMatcher = /new project/i,
     open = true,
   }: {
-    type?: 'Blank Project' | 'Example Project'
+    type?: 'Blank project' | 'Example project'
     newProjectButtonMatcher?: RegExp
     open?: boolean
   } = {}
@@ -37,7 +37,8 @@ export function createProject(
   }
   cy.findAllByRole('button').contains(newProjectButtonMatcher).click()
   // FIXME: This should only look in the left menu
-  cy.findAllByText(type).first().click()
+  // The upgrading tests create projects in older versions of Server Pro which used different casing of the project type. Use case-insensitive match.
+  cy.findAllByText(type, { exact: false }).first().click()
   cy.findByRole('dialog').within(() => {
     cy.get('input').type(name)
     cy.findByText('Create').click()
@@ -100,7 +101,7 @@ export function openProjectViaInviteNotification(projectName: string) {
 function shareProjectByEmail(
   projectName: string,
   email: string,
-  level: 'Can view' | 'Can edit'
+  level: 'Viewer' | 'Editor'
 ) {
   openProjectByName(projectName)
   cy.findByText('Share').click()
@@ -108,7 +109,13 @@ function shareProjectByEmail(
     cy.findByLabelText('Add people', { selector: 'input' }).type(`${email},`)
     cy.findByLabelText('Add people', { selector: 'input' })
       .parents('form')
-      .within(() => cy.findByText('Can edit').parent().select(level))
+      .within(() => {
+        cy.findByTestId('add-collaborator-select')
+          .click()
+          .then(() => {
+            cy.findByText(level).click()
+          })
+      })
     cy.findByText('Invite').click({ force: true })
     cy.findByText('Invite not yet accepted.')
   })
@@ -117,7 +124,7 @@ function shareProjectByEmail(
 export function shareProjectByEmailAndAcceptInviteViaDash(
   projectName: string,
   email: string,
-  level: 'Can view' | 'Can edit'
+  level: 'Viewer' | 'Editor'
 ) {
   shareProjectByEmail(projectName, email, level)
 
@@ -128,7 +135,7 @@ export function shareProjectByEmailAndAcceptInviteViaDash(
 export function shareProjectByEmailAndAcceptInviteViaEmail(
   projectName: string,
   email: string,
-  level: 'Can view' | 'Can edit'
+  level: 'Viewer' | 'Editor'
 ) {
   shareProjectByEmail(projectName, email, level)
 
@@ -208,38 +215,4 @@ export function createNewFile() {
   cy.get('.cm-line').should('have.length', 1)
 
   return fileName
-}
-
-export function toggleTrackChanges(state: boolean) {
-  cy.findByText('Review').click()
-  cy.get('.rp-tc-state-collapse').then(el => {
-    // TODO: simplify this in the frontend?
-    if (el.hasClass('rp-tc-state-collapse-on')) {
-      // make track-changes switches visible
-      cy.get('.rp-tc-state-collapse').click()
-    }
-  })
-
-  cy.findByText('Everyone')
-    .parent()
-    .within(() => {
-      cy.get('.form-check-input').then(el => {
-        if (el.prop('checked') === state) return
-
-        const id = uuid()
-        const alias = `@${id}`
-        cy.intercept({
-          method: 'POST',
-          url: '**/track_changes',
-          times: 1,
-        }).as(id)
-        if (state) {
-          cy.get('.form-check-input').check()
-        } else {
-          cy.get('.form-check-input').uncheck()
-        }
-        cy.wait(alias)
-      })
-    })
-  cy.findByText('Review').click()
 }

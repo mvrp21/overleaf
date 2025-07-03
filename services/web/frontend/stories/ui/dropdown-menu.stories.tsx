@@ -60,7 +60,7 @@ export const Active = (args: Args) => {
   )
 }
 
-export const MultipleSelection = (args: Args) => {
+export const MultipleSelection = () => {
   return (
     <DropdownMenu show>
       <DropdownHeader>Header</DropdownHeader>
@@ -191,7 +191,7 @@ export const LeadingIcon = (args: Args) => {
   )
 }
 
-export const TrailingIcon = (args: Args) => {
+export const TrailingIcon = () => {
   return (
     <DropdownMenu show>
       <OLDropdownMenuItem eventKey="1" href="#/action-1" trailingIcon="check">
@@ -219,7 +219,7 @@ export const TrailingIcon = (args: Args) => {
 }
 
 const meta: Meta<typeof DropdownMenu> = {
-  title: 'Shared / Components / Bootstrap 5 / DropdownMenu',
+  title: 'Shared / Components / DropdownMenu',
   component: DropdownMenu,
   argTypes: {
     disabled: {
@@ -230,9 +230,6 @@ const meta: Meta<typeof DropdownMenu> = {
         disable: true,
       },
     },
-  },
-  parameters: {
-    bootstrap5: true,
   },
 }
 

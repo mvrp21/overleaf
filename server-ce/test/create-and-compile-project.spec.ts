@@ -51,7 +51,7 @@ describe('Project creation and compilation', function () {
     login('user@example.com')
 
     createProject(sourceProjectName, {
-      type: 'Example Project',
+      type: 'Example project',
       open: false,
     }).as('sourceProjectId')
     createProject(targetProjectName)
@@ -79,7 +79,7 @@ describe('Project creation and compilation', function () {
     const targetProjectName = `${sourceProjectName}-target`
     login('user@example.com')
     createProject(sourceProjectName, {
-      type: 'Example Project',
+      type: 'Example project',
       open: false,
     }).as('sourceProjectId')
     createProject(targetProjectName).as('targetProjectId')
@@ -95,14 +95,12 @@ describe('Project creation and compilation', function () {
 
     cy.findByText('Share').click()
     cy.findByRole('dialog').within(() => {
-      cy.get('input').type('collaborator@example.com,')
+      cy.findByTestId('collaborator-email-input').type(
+        'collaborator@example.com,'
+      )
       cy.findByText('Invite').click({ force: true })
       cy.findByText('Invite not yet accepted.')
     })
-
-    cy.visit('/project')
-    cy.findByText('Account').click()
-    cy.findByText('Log Out').click()
 
     login('collaborator@example.com')
     openProjectViaInviteNotification(targetProjectName)

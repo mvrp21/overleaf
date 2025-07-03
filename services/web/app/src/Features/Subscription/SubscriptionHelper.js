@@ -1,23 +1,26 @@
 const { formatCurrency } = require('../../util/currency')
 const GroupPlansData = require('./GroupPlansData')
+const { isStandaloneAiAddOnPlanCode } = require('./PaymentProviderEntities')
 
 /**
  * If the user changes to a less expensive plan, we shouldn't apply the change immediately.
  * This is to avoid unintended/artifical credits on users Recurly accounts.
  */
-function shouldPlanChangeAtTermEnd(oldPlan, newPlan) {
-  return oldPlan.price_in_cents > newPlan.price_in_cents
-}
+function shouldPlanChangeAtTermEnd(oldPlan, newPlan, isInTrial) {
+  if (isInTrial) {
+    // we should always upgrade or downgrade immediately if actively in trial
+    return false
+  }
 
-/**
- * This is duplicated in:
- *   - services/web/scripts/plan-prices/plans.mjs
- *   - services/web/modules/subscriptions/frontend/js/pages/plans/group-member-picker/group-plan-pricing.js
- * @param {number} number
- * @returns {number}
- */
-function roundUpToNearest5Cents(number) {
-  return Math.ceil(number * 20) / 20
+  if (
+    oldPlan.annual === newPlan.annual &&
+    isStandaloneAiAddOnPlanCode(oldPlan.planCode) &&
+    !isStandaloneAiAddOnPlanCode(newPlan.planCode)
+  ) {
+    // changing from an standalone AI add-on plan to a non-AI plan should not be considered a downgrade
+    return false
+  }
+  return oldPlan.price_in_cents > newPlan.price_in_cents
 }
 
 /**
@@ -34,7 +37,6 @@ function roundUpToNearest5Cents(number) {
  * @typedef {Object} LocalizedGroupPrice
  * @property {PlanToPrice} price
  * @property {PlanToPrice} pricePerUser
- * @property {PlanToPrice} pricePerUserPerMonth
  */
 
 /**
@@ -51,17 +53,11 @@ function generateInitialLocalizedGroupPrice(recommendedCurrency, locale) {
       INITIAL_LICENSE_SIZE
     ].price_in_cents / 100
   const collaboratorPricePerUser = collaboratorPrice / INITIAL_LICENSE_SIZE
-  const collaboratorPricePerUserPerMonth = roundUpToNearest5Cents(
-    collaboratorPrice / INITIAL_LICENSE_SIZE / 12
-  )
   const professionalPrice =
     GroupPlansData.enterprise.professional[recommendedCurrency][
       INITIAL_LICENSE_SIZE
     ].price_in_cents / 100
   const professionalPricePerUser = professionalPrice / INITIAL_LICENSE_SIZE
-  const professionalPricePerUserPerMonth = roundUpToNearest5Cents(
-    professionalPrice / INITIAL_LICENSE_SIZE / 12
-  )
 
   /**
    * @param {number} price
@@ -79,14 +75,78 @@ function generateInitialLocalizedGroupPrice(recommendedCurrency, locale) {
       collaborator: formatPrice(collaboratorPricePerUser),
       professional: formatPrice(professionalPricePerUser),
     },
-    pricePerUserPerMonth: {
-      collaborator: formatPrice(collaboratorPricePerUserPerMonth),
-      professional: formatPrice(professionalPricePerUserPerMonth),
-    },
   }
+}
+
+function isPaidSubscription(subscription) {
+  const hasRecurlySubscription =
+    subscription?.recurlySubscription_id &&
+    subscription?.recurlySubscription_id !== ''
+  const hasStripeSubscription =
+    subscription?.paymentProvider?.subscriptionId &&
+    subscription?.paymentProvider?.subscriptionId !== ''
+  return !!(subscription && (hasRecurlySubscription || hasStripeSubscription))
+}
+
+function isIndividualActivePaidSubscription(subscription) {
+  return (
+    isPaidSubscription(subscription) &&
+    subscription?.groupPlan === false &&
+    subscription?.recurlyStatus?.state !== 'canceled' &&
+    subscription?.paymentProvider?.state !== 'canceled'
+  )
+}
+
+function getPaymentProviderSubscriptionId(subscription) {
+  if (subscription?.recurlySubscription_id) {
+    return subscription.recurlySubscription_id
+  }
+  if (subscription?.paymentProvider?.subscriptionId) {
+    return subscription.paymentProvider.subscriptionId
+  }
+  return null
+}
+
+function getPaidSubscriptionState(subscription) {
+  if (subscription?.recurlyStatus?.state) {
+    return subscription.recurlyStatus.state
+  }
+  if (subscription?.paymentProvider?.state) {
+    return subscription.paymentProvider.state
+  }
+  return null
+}
+
+function getSubscriptionTrialStartedAt(subscription) {
+  if (subscription?.recurlyStatus?.trialStartedAt) {
+    return subscription.recurlyStatus?.trialStartedAt
+  }
+  return subscription?.paymentProvider?.trialStartedAt
+}
+
+function getSubscriptionTrialEndsAt(subscription) {
+  if (subscription?.recurlyStatus?.trialEndsAt) {
+    return subscription.recurlyStatus?.trialEndsAt
+  }
+  return subscription?.paymentProvider?.trialEndsAt
+}
+
+function isInTrial(trialEndsAt) {
+  if (!trialEndsAt) {
+    return false
+  }
+
+  return trialEndsAt.getTime() > Date.now()
 }
 
 module.exports = {
   shouldPlanChangeAtTermEnd,
   generateInitialLocalizedGroupPrice,
+  isPaidSubscription,
+  isIndividualActivePaidSubscription,
+  getPaymentProviderSubscriptionId,
+  getPaidSubscriptionState,
+  getSubscriptionTrialStartedAt,
+  getSubscriptionTrialEndsAt,
+  isInTrial,
 }

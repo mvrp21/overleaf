@@ -9,9 +9,12 @@ import getMeta from '../../../../utils/meta'
 import { InsertFigureDropdown } from './insert-figure-dropdown'
 import { useTranslation } from 'react-i18next'
 import { MathDropdown } from './math-dropdown'
-import { TableInserterDropdown } from './table-inserter-dropdown'
+import { TableDropdown } from './table-dropdown'
+import { LegacyTableDropdown } from './table-inserter-dropdown-legacy'
 import { withinFormattingCommand } from '@/features/source-editor/utils/tree-operations/formatting'
+import { isSplitTestEnabled } from '@/utils/splitTestUtils'
 import { isMac } from '@/shared/utils/os'
+import { useProjectContext } from '@/shared/context/project-context'
 
 export const ToolbarItems: FC<{
   state: EditorState
@@ -27,11 +30,15 @@ export const ToolbarItems: FC<{
   listDepth,
 }) {
   const { t } = useTranslation()
-  const { toggleSymbolPalette, showSymbolPalette } = useEditorContext()
+  const { toggleSymbolPalette, showSymbolPalette, writefullInstance } =
+    useEditorContext()
+  const { features } = useProjectContext()
   const isActive = withinFormattingCommand(state)
 
   const symbolPaletteAvailable = getMeta('ol-symbolPaletteAvailable')
   const showGroup = (group: string) => !overflowed || overflowed.has(group)
+
+  const wfRebrandEnabled = isSplitTestEnabled('overleaf-assist-bundle')
 
   return (
     <>
@@ -122,13 +129,15 @@ export const ToolbarItems: FC<{
                 command={commands.wrapInHref}
                 icon="add_link"
               />
-              <ToolbarButton
-                id="toolbar-add-comment"
-                label={t('add_comment')}
-                disabled={state.selection.main.empty}
-                command={commands.addComment}
-                icon="add_comment"
-              />
+              {features.trackChangesVisible && (
+                <ToolbarButton
+                  id="toolbar-add-comment"
+                  label={t('add_comment')}
+                  disabled={state.selection.main.empty}
+                  command={commands.addComment}
+                  icon="add_comment"
+                />
+              )}
               <ToolbarButton
                 id="toolbar-ref"
                 label={t('toolbar_insert_cross_reference')}
@@ -142,7 +151,11 @@ export const ToolbarItems: FC<{
                 icon="book_5"
               />
               <InsertFigureDropdown />
-              <TableInserterDropdown />
+              {wfRebrandEnabled && writefullInstance ? (
+                <TableDropdown />
+              ) : (
+                <LegacyTableDropdown />
+              )}
             </div>
           )}
           {showGroup('group-list') && (

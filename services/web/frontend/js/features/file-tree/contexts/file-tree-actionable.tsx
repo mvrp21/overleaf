@@ -57,6 +57,7 @@ const FileTreeActionableContext = createContext<
       newFileCreateMode: any | null
       error: any | null
       canDelete: boolean
+      canBulkDelete: boolean
       canRename: boolean
       canCreate: boolean
       parentFolderId: string
@@ -218,7 +219,9 @@ function fileTreeActionableReducer(state: State, action: Action) {
   }
 }
 
-export const FileTreeActionableProvider: FC = ({ children }) => {
+export const FileTreeActionableProvider: FC<React.PropsWithChildren> = ({
+  children,
+}) => {
   const { _id: projectId } = useProjectContext()
   const { fileTreeReadOnly } = useFileTreeData()
   const { indexAllReferences } = useReferencesContext()
@@ -400,7 +403,7 @@ export const FileTreeActionableProvider: FC = ({ children }) => {
   }, [fileTreeData, selectedEntityIds])
 
   const finishCreatingEntity = useCallback(
-    entity => {
+    (entity: any) => {
       const error = validateCreate(fileTreeData, parentFolderId, entity)
       if (error) {
         return Promise.reject(error)
@@ -412,7 +415,7 @@ export const FileTreeActionableProvider: FC = ({ children }) => {
   )
 
   const finishCreatingFolder = useCallback(
-    name => {
+    (name: any) => {
       dispatch({ type: ACTION_TYPES.CREATING_FOLDER })
       return finishCreatingEntity({ endpoint: 'folder', name })
         .then(() => {
@@ -425,7 +428,7 @@ export const FileTreeActionableProvider: FC = ({ children }) => {
     [finishCreatingEntity]
   )
 
-  const startCreatingFile = useCallback(newFileCreateMode => {
+  const startCreatingFile = useCallback((newFileCreateMode: any) => {
     dispatch({ type: ACTION_TYPES.START_CREATE_FILE, newFileCreateMode })
   }, [])
 
@@ -438,7 +441,7 @@ export const FileTreeActionableProvider: FC = ({ children }) => {
   }, [startCreatingFile])
 
   const finishCreatingDocOrFile = useCallback(
-    entity => {
+    (entity: any) => {
       dispatch({ type: ACTION_TYPES.CREATING_FILE })
 
       return finishCreatingEntity(entity)
@@ -453,7 +456,7 @@ export const FileTreeActionableProvider: FC = ({ children }) => {
   )
 
   const finishCreatingDoc = useCallback(
-    entity => {
+    (entity: any) => {
       entity.endpoint = 'doc'
       return finishCreatingDocOrFile(entity)
     },
@@ -461,7 +464,7 @@ export const FileTreeActionableProvider: FC = ({ children }) => {
   )
 
   const finishCreatingLinkedFile = useCallback(
-    entity => {
+    (entity: any) => {
       entity.endpoint = 'linked_file'
       return finishCreatingDocOrFile(entity)
     },
@@ -507,6 +510,8 @@ export const FileTreeActionableProvider: FC = ({ children }) => {
   const value = useMemo(
     () => ({
       canDelete: write && selectedEntityIds.size > 0 && !isRootFolderSelected,
+      canBulkDelete:
+        write && selectedEntityIds.size > 1 && !isRootFolderSelected,
       canRename: write && selectedEntityIds.size === 1 && !isRootFolderSelected,
       canCreate: write && selectedEntityIds.size < 2,
       ...state,
@@ -543,8 +548,8 @@ export const FileTreeActionableProvider: FC = ({ children }) => {
       isDuplicate,
       isRootFolderSelected,
       parentFolderId,
-      selectedEntityIds.size,
       selectedFileName,
+      selectedEntityIds.size,
       startCreatingDocOrFile,
       startCreatingFile,
       startCreatingFolder,

@@ -1,4 +1,4 @@
-import { forwardRef, memo, MouseEventHandler, useState } from 'react'
+import { forwardRef, memo, MouseEventHandler, useRef, useState } from 'react'
 import {
   Dropdown,
   DropdownMenu,
@@ -19,6 +19,9 @@ import { sendMB } from '@/infrastructure/event-tracking'
 import { useEditorContext } from '@/shared/context/editor-context'
 import { useProjectContext } from '@/shared/context/project-context'
 import UpgradeTrackChangesModal from './upgrade-track-changes-modal'
+import { ReviewModePromo } from '@/features/review-panel-new/components/review-mode-promo'
+import useTutorial from '@/shared/hooks/promotions/use-tutorial'
+import { useLayoutContext } from '@/shared/context/layout-context'
 
 type Mode = 'view' | 'review' | 'edit'
 
@@ -27,7 +30,8 @@ const useCurrentMode = (): Mode => {
   const user = useUserContext()
   const trackChangesForCurrentUser =
     trackChanges?.onForEveryone ||
-    (user && user.id && trackChanges?.onForMembers[user.id])
+    (user?.id && trackChanges?.onForMembers[user.id]) ||
+    (!user?.id && trackChanges?.onForGuests)
   const { permissionsLevel } = useEditorContext()
 
   if (permissionsLevel === 'readOnly') {
@@ -43,7 +47,8 @@ const useCurrentMode = (): Mode => {
 
 function ReviewModeSwitcher() {
   const { t } = useTranslation()
-  const { saveTrackChangesForCurrentUser } =
+  const user = useUserContext()
+  const { saveTrackChangesForCurrentUser, saveTrackChanges } =
     useTrackChangesStateActionsContext()
   const mode = useCurrentMode()
   const { permissionsLevel } = useEditorContext()
@@ -71,9 +76,13 @@ function ReviewModeSwitcher() {
                 previousMode: mode,
                 newMode: 'edit',
               })
-              saveTrackChangesForCurrentUser(false)
+              if (user?.id) {
+                saveTrackChangesForCurrentUser(false)
+              } else {
+                saveTrackChanges({ on_for_guests: false })
+              }
             }}
-            description={t('can_edit_content')}
+            description={t('edit_content_directly')}
             leadingIcon="edit"
             active={write && mode === 'edit'}
           >
@@ -93,7 +102,11 @@ function ReviewModeSwitcher() {
                   previousMode: mode,
                   newMode: 'review',
                 })
-                saveTrackChangesForCurrentUser(true)
+                if (user?.id) {
+                  saveTrackChangesForCurrentUser(true)
+                } else {
+                  saveTrackChanges({ on_for_guests: true })
+                }
               }
             }}
             description={
@@ -141,6 +154,7 @@ const ModeSwitcherToggleButton = forwardRef<
         iconType="edit"
         label={t('editing')}
         ariaExpanded={ariaExpanded}
+        currentMode={mode}
       />
     )
   } else if (mode === 'review') {
@@ -152,6 +166,7 @@ const ModeSwitcherToggleButton = forwardRef<
         iconType="rate_review"
         label={t('reviewing')}
         ariaExpanded={ariaExpanded}
+        currentMode={mode}
       />
     )
   }
@@ -164,6 +179,7 @@ const ModeSwitcherToggleButton = forwardRef<
       iconType="visibility"
       label={t('viewing')}
       ariaExpanded={ariaExpanded}
+      currentMode={mode}
     />
   )
 })
@@ -176,31 +192,72 @@ const ModeSwitcherToggleButtonContent = forwardRef<
     iconType: string
     label: string
     ariaExpanded: boolean
+    currentMode: string
   }
->(({ onClick, className, iconType, label, ariaExpanded }, ref) => {
+>(({ onClick, className, iconType, label, ariaExpanded, currentMode }, ref) => {
   const [isFirstTimeUsed, setIsFirstTimeUsed] = usePersistedState(
     `modeSwitcherFirstTimeUsed`,
     true
   )
 
+  const tutorialProps = useTutorial('review-mode', {
+    name: 'review-mode-notification',
+  })
+
+  const user = useUserContext()
+  const project = useProjectContext()
+  const { reviewPanelOpen } = useLayoutContext()
+  const { inactiveTutorials } = useEditorContext()
+
+  const hasCompletedReviewModeTutorial =
+    inactiveTutorials.includes('review-mode')
+
+  const canShowReviewModePromo =
+    reviewPanelOpen &&
+    currentMode !== 'review' &&
+    project.features.trackChanges &&
+    user.signUpDate &&
+    user.signUpDate < '2025-03-15' &&
+    !hasCompletedReviewModeTutorial
+
+  const containerRef = useRef<HTMLSpanElement | null>(null)
+
   return (
-    <button
-      className={classNames('review-mode-switcher-toggle-button', className, {
-        'review-mode-switcher-toggle-button-expanded': isFirstTimeUsed,
-      })}
-      ref={ref}
-      onClick={event => {
-        setIsFirstTimeUsed(false)
-        onClick(event)
-      }}
-      aria-expanded={ariaExpanded}
-    >
-      <MaterialIcon className="material-symbols-outlined" type={iconType} />
-      <div className="review-mode-switcher-toggle-label" aria-label={label}>
-        {label}
-      </div>
-      <MaterialIcon type="keyboard_arrow_down" />
-    </button>
+    <>
+      <span ref={containerRef}>
+        <button
+          className={classNames(
+            'review-mode-switcher-toggle-button',
+            className,
+            {
+              'review-mode-switcher-toggle-button-expanded': isFirstTimeUsed,
+            }
+          )}
+          ref={ref}
+          onClick={event => {
+            setIsFirstTimeUsed(false)
+            if (!hasCompletedReviewModeTutorial) {
+              tutorialProps.completeTutorial({
+                action: 'complete',
+                event: 'promo-click',
+              })
+            }
+            onClick(event)
+          }}
+          aria-expanded={ariaExpanded}
+        >
+          <MaterialIcon className="material-symbols-outlined" type={iconType} />
+          <div className="review-mode-switcher-toggle-label" aria-label={label}>
+            {label}
+          </div>
+          <MaterialIcon type="keyboard_arrow_down" />
+        </button>
+      </span>
+
+      {canShowReviewModePromo && (
+        <ReviewModePromo target={containerRef} {...tutorialProps} />
+      )}
+    </>
   )
 })
 

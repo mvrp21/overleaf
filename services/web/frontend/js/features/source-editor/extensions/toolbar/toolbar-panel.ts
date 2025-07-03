@@ -18,13 +18,16 @@ const toolbarState = StateField.define<boolean>({
 export function createToolbarPanel() {
   const dom = document.createElement('div')
   dom.classList.add('ol-cm-toolbar-portal')
+  dom.id = 'ol-cm-toolbar-portal'
   return { dom, top: true }
 }
 
 const toolbarTheme = EditorView.theme({
-  '.ol-cm-toolbar': {
+  '.ol-cm-toolbar-wrapper': {
     backgroundColor: 'var(--editor-toolbar-bg)',
     color: 'var(--toolbar-btn-color)',
+  },
+  '.ol-cm-toolbar': {
     flex: 1,
     display: 'flex',
     overflowX: 'hidden',
@@ -55,6 +58,26 @@ const toolbarTheme = EditorView.theme({
         borderBottomColor: 'var(--editor-toolbar-bg)',
       },
     },
+  },
+  '.ol-cm-toolbar-header': {
+    color: 'var(--toolbar-btn-color)',
+  },
+  '.ol-cm-toolbar-dropdown-divider': {
+    borderBottom: '1px solid',
+    borderColor: 'var(--toolbar-dropdown-divider-color)',
+  },
+  // here render both the icons, and hide one depending on if its dark or light mode with &.overall-theme-dark
+  '.ol-cm-toolbar-ai-sparkle-gradient': {
+    display: 'block',
+  },
+  '.ol-cm-toolbar-ai-sparkle-white': {
+    display: 'none',
+  },
+  '&.overall-theme-dark .ol-cm-toolbar-ai-sparkle-gradient': {
+    display: 'none',
+  },
+  '&.overall-theme-dark .ol-cm-toolbar-ai-sparkle-white': {
+    display: 'block',
   },
   '.ol-cm-toolbar-button-menu-popover': {
     backgroundColor: 'initial',
@@ -215,7 +238,7 @@ const toolbarTheme = EditorView.theme({
       color: 'inherit',
     },
     '& .ol-cm-toolbar-menu': {
-      width: '120px',
+      minWidth: '120px',
       display: 'flex',
       flexDirection: 'column',
       boxSizing: 'border-box',

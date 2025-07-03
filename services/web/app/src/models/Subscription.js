@@ -25,6 +25,13 @@ const SubscriptionSchema = new Schema(
     invited_emails: [String],
     teamInvites: [TeamInviteSchema],
     recurlySubscription_id: String,
+    lastSuccesfulSubscription: {
+      planCode: {
+        type: String,
+      },
+      addOns: Schema.Types.Mixed,
+    },
+    timesRevertedDueToFailedPayment: { type: Number, default: 0 },
     teamName: { type: String },
     teamNotice: { type: String },
     planCode: { type: String },
@@ -47,6 +54,23 @@ const SubscriptionSchema = new Schema(
       },
     },
     recurlyStatus: {
+      state: {
+        type: String,
+      },
+      trialStartedAt: {
+        type: Date,
+      },
+      trialEndsAt: {
+        type: Date,
+      },
+    },
+    paymentProvider: {
+      service: {
+        type: String,
+      },
+      subscriptionId: {
+        type: String,
+      },
       state: {
         type: String,
       },

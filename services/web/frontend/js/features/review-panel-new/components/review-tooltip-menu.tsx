@@ -34,12 +34,10 @@ import { numberOfChangesInSelection } from '../utils/changes-in-selection'
 import { useEditorManagerContext } from '@/features/ide-react/context/editor-manager-context'
 import classNames from 'classnames'
 import useEventListener from '@/shared/hooks/use-event-listener'
-import getMeta from '@/utils/meta'
+import useReviewPanelLayout from '../hooks/use-review-panel-layout'
 
-const isReviewerRoleEnabled = getMeta('ol-isReviewerRoleEnabled')
-const TRACK_CHANGES_ON_WIDGET_HEIGHT = 25
 const EDIT_MODE_SWITCH_WIDGET_HEIGHT = 40
-const CM_LINE_RIGHT_PADDING = isReviewerRoleEnabled ? 8 : 2
+const CM_LINE_RIGHT_PADDING = 8
 const TOOLTIP_SHOW_DELAY = 120
 
 const ReviewTooltipMenu: FC = () => {
@@ -48,8 +46,7 @@ const ReviewTooltipMenu: FC = () => {
   const isViewer = useViewerPermissions()
   const [show, setShow] = useState(true)
   const { setView } = useReviewPanelViewActionsContext()
-  const { setReviewPanelOpen } = useLayoutContext()
-
+  const { openReviewPanel } = useReviewPanelLayout()
   const tooltipState = state.field(reviewTooltipStateField, false)?.tooltip
   const previousTooltipState = usePreviousValue(tooltipState)
 
@@ -65,7 +62,7 @@ const ReviewTooltipMenu: FC = () => {
       return
     }
 
-    setReviewPanelOpen(true)
+    openReviewPanel()
     setView('cur_file')
 
     const effects = isCursorNearViewportEdge(view, main.anchor)
@@ -77,7 +74,7 @@ const ReviewTooltipMenu: FC = () => {
 
     view.dispatch({ effects })
     setShow(false)
-  }, [setReviewPanelOpen, setView, setShow, view])
+  }, [openReviewPanel, setView, setShow, view])
 
   useEventListener('add-new-review-comment', addComment)
 
@@ -131,8 +128,8 @@ const ReviewTooltipMenuContent: FC<{ onAddComment: () => void }> = ({
     showGenericConfirmModal({
       message: t('confirm_accept_selected_changes', { count: nChanges }),
       title: t('accept_selected_changes'),
-      onConfirm: () => {
-        acceptChanges(...changeIdsInSelection)
+      onConfirm: async () => {
+        await acceptChanges(...changeIdsInSelection)
       },
       primaryVariant: 'danger',
     })
@@ -153,8 +150,8 @@ const ReviewTooltipMenuContent: FC<{ onAddComment: () => void }> = ({
     showGenericConfirmModal({
       message: t('confirm_reject_selected_changes', { count: nChanges }),
       title: t('reject_selected_changes'),
-      onConfirm: () => {
-        rejectChanges(...changeIdsInSelection)
+      onConfirm: async () => {
+        await rejectChanges(...changeIdsInSelection)
       },
       primaryVariant: 'danger',
     })
@@ -190,16 +187,9 @@ const ReviewTooltipMenuContent: FC<{ onAddComment: () => void }> = ({
           return
         }
 
-        let widgetOffset = 0
-        if (isReviewerRoleEnabled) {
-          widgetOffset = EDIT_MODE_SWITCH_WIDGET_HEIGHT
-        } else if (wantTrackChanges && !reviewPanelOpen) {
-          widgetOffset = TRACK_CHANGES_ON_WIDGET_HEIGHT
-        }
-
         return {
           position: 'fixed' as const,
-          top: scrollDomRect.top + widgetOffset,
+          top: scrollDomRect.top + EDIT_MODE_SWITCH_WIDGET_HEIGHT,
           right: window.innerWidth - editorRightPos,
         }
       },
@@ -244,6 +234,7 @@ const ReviewTooltipMenuContent: FC<{ onAddComment: () => void }> = ({
             <button
               className="review-tooltip-menu-button"
               onClick={acceptChangesHandler}
+              aria-label={t('accept_selected_changes')}
             >
               <MaterialIcon type="check" />
             </button>
@@ -256,6 +247,7 @@ const ReviewTooltipMenuContent: FC<{ onAddComment: () => void }> = ({
             <button
               className="review-tooltip-menu-button"
               onClick={rejectChangesHandler}
+              aria-label={t('reject_selected_changes')}
             >
               <MaterialIcon type="clear" />
             </button>

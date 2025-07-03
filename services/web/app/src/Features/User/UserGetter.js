@@ -11,6 +11,8 @@ const Errors = require('../Errors/Errors')
 const Features = require('../../infrastructure/Features')
 const { User } = require('../../models/User')
 const { normalizeQuery, normalizeMultiQuery } = require('../Helpers/Mongo')
+const Modules = require('../../infrastructure/Modules')
+const FeaturesHelper = require('../Subscription/FeaturesHelper')
 
 function _lastDayToReconfirm(emailData, institutionData) {
   const globalReconfirmPeriod = settings.reconfirmNotificationDays
@@ -95,6 +97,21 @@ async function getUserFullEmails(userId) {
   )
 }
 
+async function getUserFeatures(userId) {
+  const user = await UserGetter.promises.getUser(userId, {
+    features: 1,
+  })
+  if (!user) {
+    throw new Error('User not Found')
+  }
+
+  const moduleFeatures =
+    (await Modules.promises.hooks.fire('getModuleProvidedFeatures', userId)) ||
+    []
+
+  return FeaturesHelper.computeFeatureSet([user.features, ...moduleFeatures])
+}
+
 async function getUserConfirmedEmails(userId) {
   const user = await UserGetter.promises.getUser(userId, {
     emails: 1,
@@ -120,6 +137,19 @@ async function getSsoUsersAtInstitution(institutionId, projection) {
   ).exec()
 }
 
+async function getWritefullData(userId) {
+  const user = await UserGetter.promises.getUser(userId, {
+    writefull: 1,
+  })
+  if (!user) {
+    throw new Error('user not found')
+  }
+  return {
+    isPremium: Boolean(user?.writefull?.isPremium),
+    premiumSource: user?.writefull?.premiumSource || null,
+  }
+}
+
 const UserGetter = {
   getSsoUsersAtInstitution: callbackify(getSsoUsersAtInstitution),
 
@@ -136,13 +166,7 @@ const UserGetter = {
     }
   },
 
-  getUserFeatures(userId, callback) {
-    this.getUser(userId, { features: 1 }, (error, user) => {
-      if (error) return callback(error)
-      if (!user) return callback(new Errors.NotFoundError('user not found'))
-      callback(null, user.features)
-    })
-  },
+  getUserFeatures: callbackify(getUserFeatures),
 
   getUserEmail(userId, callback) {
     this.getUser(userId, { email: 1 }, (error, user) =>
@@ -245,6 +269,7 @@ const UserGetter = {
   getUsers(query, projection, callback) {
     try {
       query = normalizeMultiQuery(query)
+      if (query?._id?.$in?.length === 0) return callback(null, []) // shortcut for getUsers([])
       db.users.find(query, { projection }).toArray(callback)
     } catch (err) {
       callback(err)
@@ -260,6 +285,7 @@ const UserGetter = {
       callback(error)
     })
   },
+  getWritefullData: callbackify(getWritefullData),
 }
 
 const decorateFullEmails = (
@@ -335,9 +361,16 @@ const decorateFullEmails = (
 }
 
 UserGetter.promises = promisifyAll(UserGetter, {
-  without: ['getSsoUsersAtInstitution', 'getUserFullEmails'],
+  without: [
+    'getSsoUsersAtInstitution',
+    'getUserFullEmails',
+    'getUserFeatures',
+    'getWritefullData',
+  ],
 })
 UserGetter.promises.getUserFullEmails = getUserFullEmails
 UserGetter.promises.getSsoUsersAtInstitution = getSsoUsersAtInstitution
+UserGetter.promises.getUserFeatures = getUserFeatures
+UserGetter.promises.getWritefullData = getWritefullData
 
 module.exports = UserGetter

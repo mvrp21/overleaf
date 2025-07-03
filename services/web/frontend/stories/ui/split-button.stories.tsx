@@ -9,11 +9,9 @@ import {
   DropdownToggle,
 } from '@/features/ui/components/bootstrap-5/dropdown-menu'
 import Button from '@/features/ui/components/bootstrap-5/button'
-import { ButtonGroup } from 'react-bootstrap-5'
+import { ButtonGroup } from 'react-bootstrap'
 
-type Args = React.ComponentProps<typeof Dropdown>
-
-export const Sizes = (args: Args) => {
+export const Sizes = () => {
   const { t } = useTranslation()
   const sizes = {
     Large: 'lg',
@@ -51,13 +49,10 @@ export const Sizes = (args: Args) => {
   ))
 }
 const meta: Meta<typeof Dropdown> = {
-  title: 'Shared/Components/Bootstrap 5/SplitButton',
+  title: 'Shared/Components/SplitButton',
   component: Dropdown,
   args: {
     align: { sm: 'start' },
-  },
-  parameters: {
-    bootstrap5: true,
   },
 }
 

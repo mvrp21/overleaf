@@ -34,6 +34,7 @@ import {
 import { SplitTestInfo } from '../../../types/split-test'
 import { ValidationStatus } from '../../../types/group-management/validation'
 import { ManagedInstitution } from '../../../types/subscription/dashboard/managed-institution'
+import { OnboardingFormData } from '../../../types/onboarding'
 import { GroupSSOTestResult } from '../../../modules/group-settings/frontend/js/utils/types'
 import {
   AccessToken,
@@ -51,9 +52,18 @@ import { Publisher } from '../../../types/subscription/dashboard/publisher'
 import { SubscriptionChangePreview } from '../../../types/subscription/subscription-change-preview'
 import { DefaultNavbarMetadata } from '@/features/ui/components/types/default-navbar-metadata'
 import { FooterMetadata } from '@/features/ui/components/types/footer-metadata'
+import type { ScriptLogType } from '../../../modules/admin-panel/frontend/js/features/script-logs/script-log'
+import { ActiveExperiment } from './labs-utils'
+import { Subscription as AdminSubscription } from '../../../types/admin/subscription'
+
 export interface Meta {
   'ol-ExposedSettings': ExposedSettings
-  'ol-addonPrices': Record<string, { annual: string; monthly: string }>
+  'ol-addonPrices': Record<
+    string,
+    { annual: string; monthly: string; annualDividedByTwelve: string }
+  >
+  'ol-adminSubscription': AdminSubscription
+  'ol-aiAssistViaWritefullSource': string
   'ol-allInReconfirmNotificationPeriods': UserEmailData[]
   'ol-allowedExperiments': string[]
   'ol-allowedImageNames': AllowedImageName[]
@@ -75,7 +85,11 @@ export interface Meta {
   'ol-cannot-link-other-third-party-sso': boolean
   'ol-cannot-reactivate-subscription': boolean
   'ol-cannot-use-ai': boolean
-  'ol-chatEnabled': boolean
+  'ol-capabilities': Array<'dropbox' | 'chat'>
+  'ol-compileSettings': {
+    reducedTimeoutWarning: string
+    compileTimeout: number
+  }
   'ol-compilesUserContentDomain': string
   'ol-countryCode': PricingFormState['country']
   'ol-couponCode': PricingFormState['coupon']
@@ -101,6 +115,7 @@ export interface Meta {
   'ol-gitBridgeEnabled': boolean
   'ol-gitBridgePublicBaseUrl': string
   'ol-github': { enabled: boolean; error: boolean }
+  'ol-groupAuditLogs': []
   'ol-groupId': string
   'ol-groupName': string
   'ol-groupPlans': GroupPlans
@@ -113,10 +128,12 @@ export interface Meta {
   'ol-groupSsoSetupSuccess': boolean
   'ol-groupSubscriptionsPendingEnrollment': PendingGroupSubscriptionEnrollment[]
   'ol-groupsAndEnterpriseBannerVariant': GroupsAndEnterpriseBannerVariant
+  'ol-hasAiAssistViaWritefull': boolean
   'ol-hasGroupSSOFeature': boolean
-  'ol-hasIndividualRecurlySubscription': boolean
+  'ol-hasIndividualPaidSubscription': boolean
   'ol-hasManagedUsersFeature': boolean
   'ol-hasPassword': boolean
+  'ol-hasSplitTestWriteAccess': boolean
   'ol-hasSubscription': boolean
   'ol-hasTrackChangesFeature': boolean
   'ol-hideLinkingWidgets': boolean // CI only
@@ -126,18 +143,20 @@ export interface Meta {
   'ol-institutionLinked': InstitutionLink | undefined
   'ol-inviteToken': string
   'ol-inviterName': string
+  'ol-isCollectionMethodManual': boolean
   'ol-isExternalAuthenticationSystemUsed': boolean
   'ol-isManagedAccount': boolean
   'ol-isPaywallChangeCompileTimeoutEnabled': boolean
   'ol-isProfessional': boolean
   'ol-isRegisteredViaGoogle': boolean
   'ol-isRestrictedTokenMember': boolean
-  'ol-isReviewerRoleEnabled': boolean
   'ol-isSaas': boolean
+  'ol-isUserGroupManager': boolean
   'ol-itm_campaign': string
   'ol-itm_content': string
   'ol-itm_referrer': string
   'ol-labs': boolean
+  'ol-labsExperiments': ActiveExperiment[] | undefined
   'ol-languages': SpellCheckLanguage[]
   'ol-learnedWords': string[]
   'ol-legacyEditorThemes': string[]
@@ -151,6 +170,7 @@ export interface Meta {
   'ol-managers': MinimalUser[]
   'ol-mathJaxPath': string
   'ol-maxDocLength': number
+  'ol-maxReconnectGracefullyIntervalMs': number
   'ol-memberGroupSubscriptions': MemberGroupSubscription[]
   'ol-memberOfSSOEnabledGroups': GroupSSOLinkingStatus[]
   'ol-members': MinimalUser[]
@@ -159,8 +179,10 @@ export interface Meta {
   'ol-notifications': NotificationType[]
   'ol-notificationsInstitution': InstitutionType[]
   'ol-oauthProviders': OAuthProviders
+  'ol-odcData': OnboardingFormData
   'ol-odcRole': string
   'ol-overallThemes': OverallThemeMeta[]
+  'ol-pages': number
   'ol-passwordStrengthOptions': PasswordStrengthOptions
   'ol-paywallPlans': { [key: string]: string }
   'ol-personalAccessTokens': AccessToken[] | undefined
@@ -175,22 +197,38 @@ export interface Meta {
   'ol-preventCompileOnLoad'?: boolean
   'ol-primaryEmail': { email: string; confirmed: boolean }
   'ol-project': any // TODO
+  'ol-projectEntityCounts'?: { files: number; docs: number }
   'ol-projectHistoryBlobsEnabled': boolean
   'ol-projectName': string
+  'ol-projectOwnerHasPremiumOnPageLoad': boolean
   'ol-projectSyncSuccessMessage': string
   'ol-projectTags': Tag[]
   'ol-project_id': string
+  'ol-purchaseReferrer': string
   'ol-recommendedCurrency': CurrencyCode
   'ol-reconfirmationRemoveEmail': string
   'ol-reconfirmedViaSAML': string
+  'ol-recurlyAccount':
+    | {
+        code: string
+        error?: undefined
+      }
+    | {
+        error: boolean
+        code?: undefined
+      }
+    | undefined
   'ol-recurlyApiKey': string
   'ol-recurlySubdomain': string
   'ol-ro-mirror-on-client-no-local-storage': boolean
   'ol-samlError': SAMLError | undefined
+  'ol-script-log': ScriptLogType
+  'ol-script-logs': ScriptLogType[]
   'ol-settingsGroupSSO': { enabled: boolean } | undefined
   'ol-settingsPlans': Plan[]
   'ol-shouldAllowEditingDetails': boolean
   'ol-shouldLoadHotjar': boolean
+  'ol-showAiAssistNotification': boolean
   'ol-showAiErrorAssistant': boolean
   'ol-showBrlGeoBanner': boolean
   'ol-showCouponField': boolean
@@ -205,9 +243,11 @@ export interface Meta {
   'ol-showUpgradePrompt': boolean
   'ol-skipUrl': string
   'ol-splitTestInfo': { [name: string]: SplitTestInfo }
+  'ol-splitTestName': string
   'ol-splitTestVariants': { [name: string]: string }
   'ol-ssoDisabled': boolean
   'ol-ssoErrorMessage': string
+  'ol-stripeCustomerId': string
   'ol-subscription': any // TODO: mixed types, split into two fields
   'ol-subscriptionChangePreview': SubscriptionChangePreview
   'ol-subscriptionId': string
@@ -224,7 +264,6 @@ export interface Meta {
   'ol-translationUnableToJoin': string
   'ol-usGovBannerVariant': USGovBannerVariant
   'ol-useShareJsHash': boolean
-  'ol-usedLatex': 'never' | 'occasionally' | 'often' | undefined
   'ol-user': User
   'ol-userAffiliations': Affiliation[]
   'ol-userCanExtendTrial': boolean
@@ -235,6 +274,7 @@ export interface Meta {
   'ol-users': ManagedUser[]
   'ol-usersBestSubscription': ProjectDashboardSubscription | undefined
   'ol-usersEmail': string | undefined
+  'ol-usersSubscription': { personal: boolean; group: boolean }
   'ol-validationStatus': ValidationStatus
   'ol-wikiEnabled': boolean
   'ol-writefullCssUrl': string

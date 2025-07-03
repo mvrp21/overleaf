@@ -1,4 +1,4 @@
-import { Form } from 'react-bootstrap-5'
+import { Form } from 'react-bootstrap'
 import type { Meta, StoryObj } from '@storybook/react'
 import FormGroup from '@/features/ui/components/bootstrap-5/form/form-group'
 import FormText from '@/features/ui/components/bootstrap-5/form/form-text'
@@ -7,11 +7,8 @@ import MaterialIcon from '@/shared/components/material-icon'
 import FormFeedback from '@/features/ui/components/bootstrap-5/form/form-feedback'
 
 const meta: Meta<React.ComponentProps<typeof FormControl>> = {
-  title: 'Shared / Components / Bootstrap 5 / Form / Input',
+  title: 'Shared / Components / Form / Input',
   component: FormControl,
-  parameters: {
-    bootstrap5: true,
-  },
 }
 export default meta
 

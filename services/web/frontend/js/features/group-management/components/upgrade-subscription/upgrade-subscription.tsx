@@ -1,7 +1,7 @@
 import getMeta from '@/utils/meta'
 import { postJSON } from '@/infrastructure/fetch-json'
 import { useTranslation, Trans } from 'react-i18next'
-import { Card, Row, Col } from 'react-bootstrap-5'
+import { Card, Row, Col } from 'react-bootstrap'
 import IconButton from '@/features/ui/components/bootstrap-5/icon-button'
 import Button from '@/features/ui/components/bootstrap-5/button'
 import UpgradeSubscriptionPlanDetails from './upgrade-subscription-plan-details'
@@ -116,7 +116,7 @@ function UpgradeSubscription() {
                   className="me-auto"
                   onClick={() => sendMB('flex-add-users')}
                 >
-                  {t('add_more_users_to_my_plan')}
+                  {t('add_more_licenses_to_my_plan')}
                 </a>
                 <Button
                   href="/user/subscription"

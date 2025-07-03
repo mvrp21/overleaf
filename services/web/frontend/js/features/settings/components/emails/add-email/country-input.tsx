@@ -24,10 +24,8 @@ function Downshift({ setValue, inputRef }: CountryInputProps) {
     getLabelProps,
     getMenuProps,
     getInputProps,
-    getComboboxProps,
     getItemProps,
     highlightedIndex,
-    openMenu,
     selectedItem,
   } = useCombobox({
     inputValue,
@@ -50,7 +48,7 @@ function Downshift({ setValue, inputRef }: CountryInputProps) {
 
   return (
     <div className={classnames('dropdown', 'd-block')}>
-      <div {...getComboboxProps()}>
+      <div>
         {/* eslint-disable-next-line jsx-a11y/label-has-for */}
         <label {...getLabelProps()} className="visually-hidden">
           {t('country')}
@@ -60,16 +58,11 @@ function Downshift({ setValue, inputRef }: CountryInputProps) {
             onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
               setInputValue(event.target.value)
             },
-            onFocus: () => {
-              if (!isOpen) {
-                openMenu()
-              }
-            },
             ref: inputRef,
           })}
+          append={<i className="caret" aria-hidden />}
           placeholder={t('country')}
         />
-        <i className="caret" />
       </div>
       <ul
         {...getMenuProps()}

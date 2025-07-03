@@ -21,13 +21,15 @@ import { OError, V1ConnectionError } from '../Errors/Errors.js'
 import { User } from '../../models/User.js'
 import UserPrimaryEmailCheckHandler from '../User/UserPrimaryEmailCheckHandler.js'
 import UserController from '../User/UserController.js'
-import LimitationsManager from '../Subscription/LimitationsManager.js'
 import NotificationsBuilder from '../Notifications/NotificationsBuilder.js'
 import GeoIpLookup from '../../infrastructure/GeoIpLookup.js'
 import SplitTestHandler from '../SplitTests/SplitTestHandler.js'
 import SplitTestSessionHandler from '../SplitTests/SplitTestSessionHandler.js'
-import SubscriptionLocator from '../Subscription/SubscriptionLocator.js'
 import TutorialHandler from '../Tutorial/TutorialHandler.js'
+import SubscriptionHelper from '../Subscription/SubscriptionHelper.js'
+import PermissionsManager from '../Authorization/PermissionsManager.js'
+import SubscriptionLocator from '../Subscription/SubscriptionLocator.js'
+import AnalyticsManager from '../Analytics/AnalyticsManager.js'
 
 /**
  * @import { GetProjectsRequest, GetProjectsResponse, AllUsersProjects, MongoProject } from "./types"
@@ -102,6 +104,8 @@ async function projectListPage(req, res, next) {
   // - undefined - when there's no "saas" feature or couldn't get subscription data
   // - object - the subscription data object
   let usersBestSubscription
+  let usersIndividualSubscription
+  let usersGroupSubscriptions = []
   let survey
   let userIsMemberOfGroupSubscription = false
   let groupSubscriptionsPendingEnrollment = []
@@ -115,8 +119,8 @@ async function projectListPage(req, res, next) {
   })
   const user = await User.findById(
     userId,
-    `email emails features alphaProgram betaProgram lastPrimaryEmailCheck signUpDate${
-      isSaas ? ' enrollment writefull completedTutorials' : ''
+    `email emails features alphaProgram betaProgram lastPrimaryEmailCheck signUpDate refProviders${
+      isSaas ? ' enrollment writefull completedTutorials aiErrorAssistant' : ''
     }`
   )
 
@@ -126,14 +130,19 @@ async function projectListPage(req, res, next) {
     return
   }
 
+  user.refProviders = _.mapValues(user.refProviders, Boolean)
+
   if (isSaas) {
     await SplitTestSessionHandler.promises.sessionMaintenance(req, user)
 
     try {
-      usersBestSubscription =
-        await SubscriptionViewModelBuilder.promises.getBestSubscription({
-          _id: userId,
-        })
+      ;({
+        bestSubscription: usersBestSubscription,
+        individualSubscription: usersIndividualSubscription,
+        memberGroupSubscriptions: usersGroupSubscriptions,
+      } = await SubscriptionViewModelBuilder.promises.getUsersSubscriptionDetails(
+        { _id: userId }
+      ))
     } catch (error) {
       logger.err(
         { err: error, userId },
@@ -141,14 +150,11 @@ async function projectListPage(req, res, next) {
       )
     }
     try {
-      const { isMember, subscriptions } =
-        await LimitationsManager.promises.userIsMemberOfGroupSubscription(user)
-
-      userIsMemberOfGroupSubscription = isMember
+      userIsMemberOfGroupSubscription = usersGroupSubscriptions?.length > 0
 
       // TODO use helper function
       if (!user.enrollment?.managedBy) {
-        groupSubscriptionsPendingEnrollment = subscriptions.filter(
+        groupSubscriptionsPendingEnrollment = usersGroupSubscriptions.filter(
           subscription =>
             subscription.groupPlan && subscription.managedUsersEnabled
         )
@@ -312,18 +318,9 @@ async function projectListPage(req, res, next) {
     delete req.session.saml
   }
 
-  function fakeDelay() {
-    return new Promise(resolve => {
-      setTimeout(() => resolve(undefined), 0)
-    })
-  }
-
-  const prefetchedProjectsBlob = await Promise.race([
-    projectsBlobPending,
-    fakeDelay(),
-  ])
+  const prefetchedProjectsBlob = await projectsBlobPending
   Metrics.inc('project-list-prefetch-projects', 1, {
-    status: prefetchedProjectsBlob ? 'success' : 'too-slow',
+    status: prefetchedProjectsBlob ? 'success' : 'error',
   })
 
   // in v2 add notifications for matching university IPs
@@ -395,37 +392,76 @@ async function projectListPage(req, res, next) {
     }
   }
 
-  let hasIndividualRecurlySubscription = false
+  let hasIndividualPaidSubscription = false
 
   try {
-    const individualSubscription =
-      await SubscriptionLocator.promises.getUsersSubscription(userId)
-
-    hasIndividualRecurlySubscription =
-      individualSubscription?.groupPlan === false &&
-      individualSubscription?.recurlyStatus?.state !== 'canceled' &&
-      individualSubscription?.recurlySubscription_id !== ''
+    hasIndividualPaidSubscription =
+      SubscriptionHelper.isIndividualActivePaidSubscription(
+        usersIndividualSubscription
+      )
   } catch (error) {
     logger.error({ err: error }, 'Failed to get individual subscription')
   }
 
-  try {
-    await SplitTestHandler.promises.getAssignment(req, res, 'paywall-cta')
-  } catch (error) {
-    logger.error(
-      { err: error },
-      'failed to get "paywall-cta" split test assignment'
-    )
-  }
-
-  // Get the user's assignment for the DS unified nav split test, which
-  // populates splitTestVariants with a value for the split test name and allows
-  // Pug to send it to the browser
+  // Get the user's assignment for the papers notification banner split test,
+  // which populates splitTestVariants with a value for the split test name and
+  // allows Pug to send it to the browser
   await SplitTestHandler.promises.getAssignment(
     req,
     res,
-    'sidebar-navigation-ui-update'
+    'papers-notification-banner'
   )
+
+  const aiAssistNotificationAssignment =
+    await SplitTestHandler.promises.getAssignment(
+      req,
+      res,
+      'ai-assist-notification'
+    )
+
+  let showAiAssistNotification = false
+  if (aiAssistNotificationAssignment.variant !== 'default') {
+    showAiAssistNotification = await _showAiAssistNotification(user)
+  }
+
+  const affiliations = userAffiliations || []
+  const inEnterpriseCommons = affiliations.some(
+    affiliation => affiliation.institution?.enterpriseCommons
+  )
+
+  // customer.io: Premium nudge experiment
+  // Only do customer-io-trial-conversion assignment for users not in India/China and not in group/commons
+  let customerIoEnabled = false
+  if (!userIsMemberOfGroupSubscription && !inEnterpriseCommons) {
+    try {
+      const ip = req.ip
+      const { countryCode } = await GeoIpLookup.promises.getCurrencyCode(ip)
+      const excludedCountries = ['IN', 'CN']
+
+      if (!excludedCountries.includes(countryCode)) {
+        const cioAssignment =
+          await SplitTestHandler.promises.getAssignmentForUser(
+            userId,
+            'customer-io-trial-conversion'
+          )
+        if (cioAssignment.variant === 'enabled') {
+          customerIoEnabled = true
+          AnalyticsManager.setUserPropertyForUserInBackground(
+            userId,
+            'customer-io-integration',
+            true
+          )
+        }
+      }
+    } catch (err) {
+      logger.error(
+        { err },
+        'Error checking geo location for customer-io-trial-conversion'
+      )
+      // Fallback to not enabled if geoip fails
+      customerIoEnabled = false
+    }
+  }
 
   res.render('project/list-react', {
     title: 'your_projects',
@@ -456,8 +492,10 @@ async function projectListPage(req, res, next) {
         groupId: subscription._id,
         groupName: subscription.teamName,
       })),
-    hasIndividualRecurlySubscription,
+    hasIndividualPaidSubscription,
     userRestrictions: Array.from(req.userRestrictions || []),
+    customerIoEnabled,
+    showAiAssistNotification,
   })
 }
 
@@ -740,6 +778,43 @@ function _hasActiveFilter(filters) {
     filters.tag?.length ||
     filters.search?.length
   )
+}
+
+async function _showAiAssistNotification(user) {
+  // Check if the assistant has been manually disabled by the user
+  if (user.aiErrorAssistant?.enabled === false) {
+    return false
+  }
+
+  // Check if the user can use AI features (policy check)
+  const canUseAi = await PermissionsManager.promises.checkUserPermissions(
+    user,
+    ['use-ai']
+  )
+  if (!canUseAi) {
+    return false
+  }
+
+  // Check if the user has a subscription with manually collected group admins (#22822)
+  const subscription = await SubscriptionLocator.promises.getUsersSubscription(
+    user._id
+  )
+  if (subscription?.collectionMethod === 'manual') {
+    return false
+  }
+
+  // Check if the user already has AI Assist via Overleaf
+  if (user.features?.aiErrorAssistant) {
+    return false
+  }
+  // Check if the user already has AI Assist via Writefull
+  const { isPremium: hasAiAssistViaWritefull } =
+    await UserGetter.promises.getWritefullData(user._id)
+  if (hasAiAssistViaWritefull) {
+    return false
+  }
+
+  return true
 }
 
 export default {

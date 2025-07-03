@@ -11,7 +11,6 @@ import {
 import { SSOConfig } from '../../models/SSOConfig.js'
 import { Parser as CSVParser } from 'json2csv'
 import { expressify } from '@overleaf/promise-utils'
-import SplitTestHandler from '../SplitTests/SplitTestHandler.js'
 import PlansLocator from '../Subscription/PlansLocator.js'
 import RecurlyClient from '../Subscription/RecurlyClient.js'
 
@@ -31,18 +30,12 @@ async function manageGroupMembers(req, res, next) {
     entityConfig
   )
   const ssoConfig = await SSOConfig.findById(subscription.ssoConfig).exec()
-
-  await SplitTestHandler.promises.getAssignment(
-    req,
-    res,
-    'flexible-group-licensing'
-  )
-
-  await SplitTestHandler.promises.getAssignment(req, res, 'bootstrap-5-groups')
-
   const plan = PlansLocator.findLocalPlanInSettings(subscription.planCode)
-  const userId = SessionManager.getLoggedInUserId(req.session)
+  const userId = SessionManager.getLoggedInUserId(req.session)?.toString()
   const isAdmin = subscription.admin_id.toString() === userId
+  const isUserGroupManager =
+    Boolean(subscription.manager_ids?.some(id => id.toString() === userId)) &&
+    !isAdmin
   const recurlySubscription = subscription.recurlySubscription_id
     ? await RecurlyClient.promises.getSubscription(
         subscription.recurlySubscription_id
@@ -61,6 +54,7 @@ async function manageGroupMembers(req, res, next) {
     users,
     groupSize: subscription.membersLimit,
     managedUsersActive: subscription.managedUsersEnabled,
+    isUserGroupManager,
     groupSSOActive: ssoConfig?.enabled,
     canUseFlexibleLicensing: plan?.canUseFlexibleLicensing,
     canUseAddSeatsFeature,
@@ -119,8 +113,6 @@ async function _renderManagersPage(req, res, next, template) {
     entityWithV1Data,
     entityConfig
   )
-
-  await SplitTestHandler.promises.getAssignment(req, res, 'bootstrap-5-groups')
 
   res.render(template, {
     name: entityName,

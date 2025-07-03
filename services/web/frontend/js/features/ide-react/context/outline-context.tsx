@@ -14,7 +14,7 @@ import * as eventTracking from '@/infrastructure/event-tracking'
 import { isValidTeXFile } from '@/main/is-valid-tex-file'
 import localStorage from '@/infrastructure/local-storage'
 import { useProjectContext } from '@/shared/context/project-context'
-import { useEditorManagerContext } from '@/features/ide-react/context/editor-manager-context'
+import { useEditorOpenDocContext } from '@/features/ide-react/context/editor-open-doc-context'
 
 export type PartialFlatOutline = {
   level: number
@@ -42,7 +42,7 @@ const OutlineContext = createContext<
   | undefined
 >(undefined)
 
-export const OutlineProvider: FC = ({ children }) => {
+export const OutlineProvider: FC<React.PropsWithChildren> = ({ children }) => {
   const [flatOutline, setFlatOutline] = useState<FlatOutlineState>(undefined)
   const [currentlyHighlightedLine, setCurrentlyHighlightedLine] =
     useState<number>(-1)
@@ -55,7 +55,7 @@ export const OutlineProvider: FC = ({ children }) => {
 
   useEventListener(
     'file-view:file-opened',
-    useCallback(_ => {
+    useCallback(() => {
       setBinaryFileOpened(true)
     }, [])
   )
@@ -63,7 +63,7 @@ export const OutlineProvider: FC = ({ children }) => {
   useEventListener(
     'scroll:editor:update',
     useCallback(
-      evt => {
+      (evt: CustomEvent) => {
         if (ignoreNextScroll) {
           setIgnoreNextScroll(false)
           return
@@ -77,7 +77,7 @@ export const OutlineProvider: FC = ({ children }) => {
   useEventListener(
     'cursor:editor:update',
     useCallback(
-      evt => {
+      (evt: CustomEvent) => {
         if (ignoreNextCursorUpdate) {
           setIgnoreNextCursorUpdate(false)
           return
@@ -90,7 +90,7 @@ export const OutlineProvider: FC = ({ children }) => {
 
   useEventListener(
     'doc:after-opened',
-    useCallback(evt => {
+    useCallback((evt: CustomEvent) => {
       if (evt.detail.isNewDoc) {
         setIgnoreNextCursorUpdate(true)
       }
@@ -118,7 +118,7 @@ export const OutlineProvider: FC = ({ children }) => {
     [flatOutline, currentlyHighlightedLine]
   )
 
-  const { openDocName } = useEditorManagerContext()
+  const { openDocName } = useEditorOpenDocContext()
   const isTexFile = useMemo(
     () => (openDocName ? isValidTeXFile(openDocName) : false),
     [openDocName]

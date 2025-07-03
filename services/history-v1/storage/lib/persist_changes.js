@@ -80,6 +80,7 @@ async function persistChanges(projectId, allChanges, limits, clientEndVersion) {
 
   let originalEndVersion
   let changesToPersist
+  let resyncNeeded = false
 
   limits = limits || {}
   _.defaults(limits, {
@@ -164,12 +165,14 @@ async function persistChanges(projectId, allChanges, limits, clientEndVersion) {
         const actualHash = content != null ? getContentHash(content) : null
         logger.debug({ expectedHash, actualHash }, 'validating content hash')
         if (actualHash !== expectedHash) {
-          throw new InvalidChangeError('content hash mismatch', {
-            projectId,
-            path,
-            expectedHash,
-            actualHash,
-          })
+          // only log a warning on the first mismatch in each persistChanges call
+          if (!resyncNeeded) {
+            logger.warn(
+              { projectId, path, expectedHash, actualHash },
+              'content hash mismatch'
+            )
+          }
+          resyncNeeded = true
         }
 
         // Remove the content hash from the change before storing it in the chunk.
@@ -179,8 +182,10 @@ async function persistChanges(projectId, allChanges, limits, clientEndVersion) {
     }
   }
 
-  async function extendLastChunkIfPossible() {
-    const latestChunk = await chunkStore.loadLatest(projectId)
+  async function loadLatestChunk() {
+    const latestChunk = await chunkStore.loadLatest(projectId, {
+      persistedOnly: true,
+    })
 
     currentChunk = latestChunk
     originalEndVersion = latestChunk.getEndVersion()
@@ -192,9 +197,11 @@ async function persistChanges(projectId, allChanges, limits, clientEndVersion) {
     }
 
     currentSnapshot = latestChunk.getSnapshot().clone()
-    const timer = new Timer()
-    currentSnapshot.applyAll(latestChunk.getChanges())
+    currentSnapshot.applyAll(currentChunk.getChanges())
+  }
 
+  async function extendLastChunkIfPossible() {
+    const timer = new Timer()
     const changesPushed = await fillChunk(currentChunk, changesToPersist)
     if (!changesPushed) {
       return
@@ -202,12 +209,7 @@ async function persistChanges(projectId, allChanges, limits, clientEndVersion) {
 
     checkElapsedTime(timer)
 
-    await chunkStore.update(
-      projectId,
-      originalEndVersion,
-      currentChunk,
-      earliestChangeTimestamp
-    )
+    await chunkStore.update(projectId, currentChunk, earliestChangeTimestamp)
   }
 
   async function createNewChunksAsNeeded() {
@@ -245,6 +247,7 @@ async function persistChanges(projectId, allChanges, limits, clientEndVersion) {
     changesToPersist = oldChanges
     const numberOfChangesToPersist = oldChanges.length
 
+    await loadLatestChunk()
     await extendLastChunkIfPossible()
     await createNewChunksAsNeeded()
 
@@ -252,6 +255,7 @@ async function persistChanges(projectId, allChanges, limits, clientEndVersion) {
       numberOfChangesPersisted: numberOfChangesToPersist,
       originalEndVersion,
       currentChunk,
+      resyncNeeded,
     }
   } else {
     return null

@@ -18,6 +18,8 @@ const {
   HashCheckBlobStore,
   ProjectArchive,
   zipStore,
+  persistBuffer,
+  redisBuffer,
 } = require('../../storage')
 
 const render = require('./render')
@@ -34,6 +36,7 @@ async function initializeProject(req, res, next) {
     res.status(HTTPStatus.OK).json({ projectId })
   } catch (err) {
     if (err instanceof chunkStore.AlreadyInitialized) {
+      logger.warn({ err, projectId }, 'failed to initialize')
       render.conflict(res)
     } else {
       throw err
@@ -91,7 +94,7 @@ async function getLatestHistoryRaw(req, res, next) {
   const readOnly = req.swagger.params.readOnly.value
   try {
     const { startVersion, endVersion, endTimestamp } =
-      await chunkStore.loadLatestRaw(projectId, { readOnly })
+      await chunkStore.getLatestChunkMetadata(projectId, { readOnly })
     res.json({
       startVersion,
       endVersion,
@@ -136,6 +139,43 @@ async function getHistoryBefore(req, res, next) {
       throw err
     }
   }
+}
+
+/**
+ * Get all changes since the beginning of history or since a given version
+ */
+async function getChanges(req, res, next) {
+  const projectId = req.swagger.params.project_id.value
+  const since = req.swagger.params.since.value ?? 0
+
+  if (since < 0) {
+    // Negative values would cause an infinite loop
+    return res.status(400).json({
+      error: `Version out of bounds: ${since}`,
+    })
+  }
+
+  let chunk
+  try {
+    chunk = await chunkStore.loadAtVersion(projectId, since, {
+      preferNewer: true,
+    })
+  } catch (err) {
+    if (err instanceof Chunk.VersionNotFoundError) {
+      return res.status(400).json({
+        error: `Version out of bounds: ${since}`,
+      })
+    }
+    throw err
+  }
+
+  const latestChunkMetadata = await chunkStore.getLatestChunkMetadata(projectId)
+
+  // Extract the relevant changes from the chunk that contains the start version
+  const changes = chunk.getChanges().slice(since - chunk.getStartVersion())
+  const hasMore = latestChunkMetadata.endVersion > chunk.getEndVersion()
+
+  res.json({ changes: changes.map(change => change.toRaw()), hasMore })
 }
 
 async function getZip(req, res, next) {
@@ -188,6 +228,19 @@ async function createZip(req, res, next) {
 async function deleteProject(req, res, next) {
   const projectId = req.swagger.params.project_id.value
   const blobStore = new BlobStore(projectId)
+
+  const farFuture = new Date()
+  farFuture.setTime(farFuture.getTime() + 7 * 24 * 3600 * 1000)
+  const limits = {
+    maxChanges: 0,
+    minChangeTimestamp: farFuture,
+    maxChangeTimestamp: farFuture,
+    autoResync: false,
+  }
+
+  await persistBuffer(projectId, limits)
+  await redisBuffer.expireProject(projectId)
+
   await Promise.all([
     chunkStore.deleteProjectChunks(projectId),
     blobStore.deleteBlobs(),
@@ -205,22 +258,28 @@ async function createProjectBlob(req, res, next) {
     const sizeLimit = new StreamSizeLimit(maxUploadSize)
     await pipeline(req, sizeLimit, fs.createWriteStream(tmpPath))
     if (sizeLimit.sizeLimitExceeded) {
+      logger.warn(
+        { projectId, expectedHash, maxUploadSize },
+        'blob exceeds size threshold'
+      )
       return render.requestEntityTooLarge(res)
     }
     const hash = await blobHash.fromFile(tmpPath)
     if (hash !== expectedHash) {
-      logger.debug({ hash, expectedHash }, 'Hash mismatch')
+      logger.warn({ projectId, hash, expectedHash }, 'Hash mismatch')
       return render.conflict(res, 'File hash mismatch')
     }
 
     const blobStore = new BlobStore(projectId)
     const newBlob = await blobStore.putFile(tmpPath)
 
-    try {
-      const { backupBlob } = await import('../../storage/lib/backupBlob.mjs')
-      await backupBlob(projectId, newBlob, tmpPath)
-    } catch (error) {
-      logger.warn({ error, projectId, hash }, 'Failed to backup blob')
+    if (config.has('backupStore')) {
+      try {
+        const { backupBlob } = await import('../../storage/lib/backupBlob.mjs')
+        await backupBlob(projectId, newBlob, tmpPath)
+      } catch (error) {
+        logger.warn({ error, projectId, hash }, 'Failed to backup blob')
+      }
     }
     res.status(HTTPStatus.CREATED).end()
   })
@@ -304,6 +363,10 @@ async function copyProjectBlob(req, res, next) {
     targetBlobStore.getBlob(blobHash),
   ])
   if (!sourceBlob) {
+    logger.warn(
+      { sourceProjectId, targetProjectId, blobHash },
+      'missing source blob when copying across projects'
+    )
     return render.notFound(res)
   }
   // Exit early if the blob exists in the target project.
@@ -337,6 +400,7 @@ module.exports = {
   getLatestHistoryRaw: expressify(getLatestHistoryRaw),
   getHistory: expressify(getHistory),
   getHistoryBefore: expressify(getHistoryBefore),
+  getChanges: expressify(getChanges),
   getZip: expressify(getZip),
   createZip: expressify(createZip),
   deleteProject: expressify(deleteProject),

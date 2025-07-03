@@ -1,3 +1,7 @@
+const _ = require('lodash')
+const confusingBrowserGlobals = require('confusing-browser-globals')
+const globals = require('globals')
+
 module.exports = {
   root: true,
   parser: '@typescript-eslint/parser',
@@ -19,6 +23,7 @@ module.exports = {
   },
   rules: {
     'no-constant-binary-expression': 'error',
+    'no-restricted-globals': ['error', ...confusingBrowserGlobals],
 
     // do not allow importing of implicit dependencies.
     'import/no-extraneous-dependencies': 'error',
@@ -39,6 +44,12 @@ module.exports = {
       'error',
       { functions: false, classes: false, variables: false },
     ],
+    'react-hooks/exhaustive-deps': [
+      'warn',
+      {
+        additionalHooks: '(useCommandProvider)',
+      },
+    ],
   },
   overrides: [
     // NOTE: changing paths may require updating them in the Makefile too.
@@ -58,6 +69,10 @@ module.exports = {
     {
       // Test specific rules
       files: ['**/test/**/*.*'],
+      excludedFiles: [
+        '**/test/unit/src/**/*.test.mjs',
+        'test/unit/vitest_bootstrap.mjs',
+      ], // exclude vitest files
       plugins: ['mocha', 'chai-expect', 'chai-friendly'],
       env: {
         mocha: true,
@@ -86,6 +101,30 @@ module.exports = {
         // based on mocha's context mechanism
         'mocha/prefer-arrow-callback': 'error',
 
+        '@typescript-eslint/no-unused-expressions': 'off',
+      },
+    },
+    {
+      files: [
+        '**/test/unit/src/**/*.test.mjs',
+        'test/unit/vitest_bootstrap.mjs',
+      ],
+      env: {
+        jest: true, // best match for vitest API etc.
+      },
+      plugins: ['@vitest', 'chai-expect', 'chai-friendly'], // still using chai for now
+      rules: {
+        // vitest-specific rules
+        '@vitest/no-focused-tests': 'error',
+        '@vitest/no-disabled-tests': 'error',
+
+        // Swap the no-unused-expressions rule with a more chai-friendly one
+        'no-unused-expressions': 'off',
+        'chai-friendly/no-unused-expressions': 'error',
+
+        // chai-specific rules
+        'chai-expect/missing-assertion': 'error',
+        'chai-expect/terminating-properties': 'error',
         '@typescript-eslint/no-unused-expressions': 'off',
       },
     },
@@ -349,6 +388,18 @@ module.exports = {
               'Modify location via customLocalStorage instead of calling window.localStorage methods directly',
           },
         ],
+        'no-unused-vars': 'off',
+        '@typescript-eslint/no-unused-vars': [
+          'error',
+          {
+            args: 'after-used',
+            argsIgnorePattern: '^_',
+            ignoreRestSiblings: false,
+            caughtErrors: 'none',
+            vars: 'all',
+            varsIgnorePattern: '^_',
+          },
+        ],
       },
     },
     {
@@ -483,6 +534,18 @@ module.exports = {
       ],
       rules: {
         'no-console': 'error',
+      },
+    },
+    {
+      files: ['**/*.worker.{js,ts}'],
+      rules: {
+        'no-restricted-globals': [
+          'error',
+          ..._.difference(
+            Object.keys({ ...globals.browser, ...globals.node }),
+            Object.keys(globals.worker)
+          ),
+        ],
       },
     },
   ],

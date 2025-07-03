@@ -20,7 +20,6 @@ import { getSafeAdminDomainRedirect } from '../Helpers/UrlHelper.js'
 import UserGetter from '../User/UserGetter.js'
 import Settings from '@overleaf/settings'
 import LimitationsManager from '../Subscription/LimitationsManager.js'
-import SplitTestHandler from '../SplitTests/SplitTestHandler.js'
 
 const orderedPrivilegeLevels = [
   PrivilegeLevels.NONE,
@@ -67,7 +66,7 @@ async function _handleV1Project(token, userId) {
       userId
     )
     // This should not happen anymore, but it does show
-    // a nice "contact support" message, so it can stay
+    // a nice "contact Support" message, so it can stay
     if (!docInfo) {
       return { v1Import: { status: 'cannotImport' } }
     }
@@ -112,13 +111,6 @@ async function tokenAccessPage(req, res, next) {
       }
     }
 
-    // Populates splitTestVariants with a value for the split test name and allows
-    // Pug to read it
-    await SplitTestHandler.promises.getAssignment(
-      req,
-      res,
-      'bs5-misc-pages-b2c'
-    )
     res.render('project/token/access-react', {
       postUrl: makePostUrl(token),
     })

@@ -244,6 +244,7 @@ async function generateNewInvite(req, res) {
 async function viewInvite(req, res) {
   const projectId = req.params.Project_id
   const { token } = req.params
+
   const _renderInvalidPage = function () {
     res.status(404)
     logger.debug({ projectId }, 'invite not valid, rendering not-valid page')

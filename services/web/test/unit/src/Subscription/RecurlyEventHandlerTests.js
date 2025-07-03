@@ -41,14 +41,15 @@ describe('RecurlyEventHandler', function () {
             getAssignmentForUser: sinon.stub().resolves({
               variant: 'default',
             }),
+            hasUserBeenAssignedToVariant: sinon.stub().resolves(false),
           },
         }),
       },
     })
   })
 
-  it('with new_subscription_notification - free trial', function () {
-    this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
+  it('with new_subscription_notification - free trial', async function () {
+    await this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
       'new_subscription_notification',
       this.eventData
     )
@@ -62,6 +63,49 @@ describe('RecurlyEventHandler', function () {
         is_trial: true,
         has_ai_add_on: false,
         subscriptionId: this.eventData.subscription.uuid,
+        payment_provider: 'recurly',
+        'customerio-integration': false,
+      }
+    )
+    sinon.assert.calledWith(
+      this.AnalyticsManager.setUserPropertyForUserInBackground,
+      this.userId,
+      'subscription-plan-code',
+      this.planCode
+    )
+    sinon.assert.calledWith(
+      this.AnalyticsManager.setUserPropertyForUserInBackground,
+      this.userId,
+      'subscription-state',
+      'active'
+    )
+    sinon.assert.calledWith(
+      this.AnalyticsManager.setUserPropertyForUserInBackground,
+      this.userId,
+      'subscription-is-trial',
+      true
+    )
+  })
+
+  it('with new_subscription_notification - free trial with customerio integration enabled', async function () {
+    this.SplitTestHandler.promises.hasUserBeenAssignedToVariant.resolves(true)
+
+    await this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
+      'new_subscription_notification',
+      this.eventData
+    )
+    sinon.assert.calledWith(
+      this.AnalyticsManager.recordEventForUserInBackground,
+      this.userId,
+      'subscription-started',
+      {
+        plan_code: this.planCode,
+        quantity: 1,
+        is_trial: true,
+        has_ai_add_on: false,
+        subscriptionId: this.eventData.subscription.uuid,
+        payment_provider: 'recurly',
+        'customerio-integration': true,
       }
     )
     sinon.assert.calledWith(
@@ -93,7 +137,7 @@ describe('RecurlyEventHandler', function () {
     sinon.assert.called(this.SubscriptionEmailHandler.sendTrialOnboardingEmail)
   })
 
-  it('with new_subscription_notification - no free trial', function () {
+  it('with new_subscription_notification - no free trial', async function () {
     this.eventData.subscription.current_period_started_at = new Date(
       '2021-02-10 12:34:56'
     )
@@ -102,7 +146,7 @@ describe('RecurlyEventHandler', function () {
     )
     this.eventData.subscription.quantity = 3
 
-    this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
+    await this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
       'new_subscription_notification',
       this.eventData
     )
@@ -116,6 +160,8 @@ describe('RecurlyEventHandler', function () {
         is_trial: false,
         has_ai_add_on: false,
         subscriptionId: this.eventData.subscription.uuid,
+        payment_provider: 'recurly',
+        'customerio-integration': false,
       }
     )
     sinon.assert.calledWith(
@@ -132,10 +178,10 @@ describe('RecurlyEventHandler', function () {
     )
   })
 
-  it('with updated_subscription_notification', function () {
+  it('with updated_subscription_notification', async function () {
     this.planCode = 'new-plan-code'
     this.eventData.subscription.plan.plan_code = this.planCode
-    this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
+    await this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
       'updated_subscription_notification',
       this.eventData
     )
@@ -149,6 +195,51 @@ describe('RecurlyEventHandler', function () {
         is_trial: true,
         has_ai_add_on: false,
         subscriptionId: this.eventData.subscription.uuid,
+        payment_provider: 'recurly',
+        'customerio-integration': false,
+      }
+    )
+    sinon.assert.calledWith(
+      this.AnalyticsManager.setUserPropertyForUserInBackground,
+      this.userId,
+      'subscription-plan-code',
+      this.planCode
+    )
+    sinon.assert.calledWith(
+      this.AnalyticsManager.setUserPropertyForUserInBackground,
+      this.userId,
+      'subscription-state',
+      'active'
+    )
+    sinon.assert.calledWith(
+      this.AnalyticsManager.setUserPropertyForUserInBackground,
+      this.userId,
+      'subscription-is-trial',
+      true
+    )
+  })
+
+  it('with updated_subscription_notification with customerio integration enabled', async function () {
+    this.SplitTestHandler.promises.hasUserBeenAssignedToVariant.resolves(true)
+    this.planCode = 'new-plan-code'
+    this.eventData.subscription.plan.plan_code = this.planCode
+
+    await this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
+      'updated_subscription_notification',
+      this.eventData
+    )
+    sinon.assert.calledWith(
+      this.AnalyticsManager.recordEventForUserInBackground,
+      this.userId,
+      'subscription-updated',
+      {
+        plan_code: this.planCode,
+        quantity: 1,
+        is_trial: true,
+        has_ai_add_on: false,
+        subscriptionId: this.eventData.subscription.uuid,
+        payment_provider: 'recurly',
+        'customerio-integration': true,
       }
     )
     sinon.assert.calledWith(
@@ -187,6 +278,8 @@ describe('RecurlyEventHandler', function () {
         is_trial: true,
         has_ai_add_on: false,
         subscriptionId: this.eventData.subscription.uuid,
+        payment_provider: 'recurly',
+        'customerio-integration': false,
       }
     )
     sinon.assert.calledWith(
@@ -203,9 +296,9 @@ describe('RecurlyEventHandler', function () {
     )
   })
 
-  it('with expired_subscription_notification', function () {
+  it('with expired_subscription_notification', async function () {
     this.eventData.subscription.state = 'expired'
-    this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
+    await this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
       'expired_subscription_notification',
       this.eventData
     )
@@ -219,6 +312,8 @@ describe('RecurlyEventHandler', function () {
         is_trial: true,
         has_ai_add_on: false,
         subscriptionId: this.eventData.subscription.uuid,
+        payment_provider: 'recurly',
+        'customerio-integration': false,
       }
     )
     sinon.assert.calledWith(
@@ -241,8 +336,8 @@ describe('RecurlyEventHandler', function () {
     )
   })
 
-  it('with renewed_subscription_notification', function () {
-    this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
+  it('with renewed_subscription_notification', async function () {
+    await this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
       'renewed_subscription_notification',
       this.eventData
     )
@@ -256,12 +351,14 @@ describe('RecurlyEventHandler', function () {
         is_trial: true,
         has_ai_add_on: false,
         subscriptionId: this.eventData.subscription.uuid,
+        payment_provider: 'recurly',
+        'customerio-integration': false,
       }
     )
   })
 
-  it('with reactivated_account_notification', function () {
-    this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
+  it('with reactivated_account_notification', async function () {
+    await this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
       'reactivated_account_notification',
       this.eventData
     )
@@ -274,11 +371,13 @@ describe('RecurlyEventHandler', function () {
         quantity: 1,
         has_ai_add_on: false,
         subscriptionId: this.eventData.subscription.uuid,
+        payment_provider: 'recurly',
+        'customerio-integration': false,
       }
     )
   })
 
-  it('with paid_charge_invoice_notification', function () {
+  it('with paid_charge_invoice_notification', async function () {
     const invoice = {
       invoice_number: 1234,
       currency: 'USD',
@@ -291,7 +390,7 @@ describe('RecurlyEventHandler', function () {
       collection_method: 'automatic',
       subscription_ids: ['abcd1234', 'defa3214'],
     }
-    this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
+    await this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
       'paid_charge_invoice_notification',
       {
         account: {
@@ -313,12 +412,13 @@ describe('RecurlyEventHandler', function () {
         collectionMethod: invoice.collection_method,
         subscriptionId1: invoice.subscription_ids[0],
         subscriptionId2: invoice.subscription_ids[1],
+        payment_provider: 'recurly',
       }
     )
   })
 
-  it('with paid_charge_invoice_notification and total_in_cents 0', function () {
-    this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
+  it('with paid_charge_invoice_notification and total_in_cents 0', async function () {
+    await this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
       'paid_charge_invoice_notification',
       {
         account: {
@@ -333,8 +433,8 @@ describe('RecurlyEventHandler', function () {
     sinon.assert.notCalled(this.AnalyticsManager.recordEventForUserInBackground)
   })
 
-  it('with closed_invoice_notification', function () {
-    this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
+  it('with closed_invoice_notification', async function () {
+    await this.RecurlyEventHandler.sendRecurlyAnalyticsEvent(
       'closed_invoice_notification',
       {
         account: {

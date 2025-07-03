@@ -33,7 +33,7 @@ export default function DictionaryModalContent({
   const { isError, runAsync } = useAsync()
 
   const handleRemove = useCallback(
-    word => {
+    (word: string) => {
       runAsync(postJSON('/spelling/unlearn', { body: { word } }))
         .then(() => {
           setLearnedWords(prevLearnedWords => {
@@ -68,7 +68,9 @@ export default function DictionaryModalContent({
           <ul className="list-unstyled dictionary-entries-list">
             {[...learnedWords].sort(wordsSortFunction).map(learnedWord => (
               <li key={learnedWord} className="dictionary-entry">
-                <span className="dictionary-entry-name">{learnedWord}</span>
+                <span className="dictionary-entry-name" translate="no">
+                  {learnedWord}
+                </span>
                 <OLTooltip
                   id={`tooltip-remove-learned-word-${learnedWord}`}
                   description={t('edit_dictionary_remove')}

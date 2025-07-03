@@ -20,12 +20,11 @@ function HistoryDropdown({
     <ActionsDropdown
       id={id}
       isOpened={isOpened}
-      toolTipDescription={t('more_actions')}
+      tooltipDescription={t('more_actions')}
       setIsOpened={setIsOpened}
       iconTag={
         <MaterialIcon type="more_vert" accessibilityLabel={t('more_actions')} />
       }
-      parentSelector="[data-history-version-list-container]"
     >
       {children}
     </ActionsDropdown>

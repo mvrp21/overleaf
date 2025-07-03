@@ -9,7 +9,6 @@ import UserAuditLogHandler from '../User/UserAuditLogHandler.js'
 import { expressify } from '@overleaf/promise-utils'
 import Modules from '../../infrastructure/Modules.js'
 import SplitTestHandler from '../SplitTests/SplitTestHandler.js'
-import ErrorController from '../Errors/ErrorController.js'
 import UserGetter from '../User/UserGetter.js'
 import { Subscription } from '../../models/Subscription.js'
 import { isProfessionalGroupPlan } from './PlansHelper.mjs'
@@ -19,6 +18,7 @@ import {
   PendingChangeError,
   InactiveError,
   SubtotalLimitExceededError,
+  HasPastDueInvoiceError,
 } from './Errors.js'
 import RecurlyClient from './RecurlyClient.js'
 
@@ -108,10 +108,16 @@ async function _removeUserFromGroup(
     })
   }
 
+  const groupAuditLog = {
+    initiatorId: loggedInUserId,
+    ipAddress: req.ip,
+  }
+
   try {
     await SubscriptionGroupHandler.promises.removeUserFromGroup(
       subscriptionId,
-      userToRemoveId
+      userToRemoveId,
+      groupAuditLog
     )
   } catch (error) {
     logger.err(
@@ -137,23 +143,42 @@ async function addSeatsToGroupSubscription(req, res) {
         userId
       )
     await SubscriptionGroupHandler.promises.ensureFlexibleLicensingEnabled(plan)
-    await SubscriptionGroupHandler.promises.ensureSubscriptionCollectionMethodIsNotManual(
-      recurlySubscription
-    )
     await SubscriptionGroupHandler.promises.ensureSubscriptionHasNoPendingChanges(
       recurlySubscription
     )
-    // Check if the user has missing billing details
-    await RecurlyClient.promises.getPaymentMethod(userId)
     await SubscriptionGroupHandler.promises.ensureSubscriptionIsActive(
       subscription
     )
+    await SubscriptionGroupHandler.promises.ensureSubscriptionHasNoPastDueInvoice(
+      subscription
+    )
+
+    const { variant: flexibleLicensingForManuallyBilledSubscriptionsVariant } =
+      await SplitTestHandler.promises.getAssignment(
+        req,
+        res,
+        'flexible-group-licensing-for-manually-billed-subscriptions'
+      )
+
+    if (flexibleLicensingForManuallyBilledSubscriptionsVariant === 'enabled') {
+      await SubscriptionGroupHandler.promises.checkBillingInfoExistence(
+        recurlySubscription,
+        userId
+      )
+    } else {
+      await SubscriptionGroupHandler.promises.ensureSubscriptionCollectionMethodIsNotManual(
+        recurlySubscription
+      )
+      // Check if the user has missing billing details
+      await RecurlyClient.promises.getPaymentMethod(userId)
+    }
 
     res.render('subscriptions/add-seats', {
       subscriptionId: subscription._id,
       groupName: subscription.teamName,
       totalLicenses: subscription.membersLimit,
       isProfessional: isProfessionalGroupPlan(subscription),
+      isCollectionMethodManual: recurlySubscription.isCollectionMethodManual,
     })
   } catch (error) {
     if (error instanceof MissingBillingInfoError) {
@@ -168,7 +193,11 @@ async function addSeatsToGroupSubscription(req, res) {
       )
     }
 
-    if (error instanceof PendingChangeError || error instanceof InactiveError) {
+    if (
+      error instanceof PendingChangeError ||
+      error instanceof InactiveError ||
+      error instanceof HasPastDueInvoiceError
+    ) {
       return res.redirect('/user/subscription')
     }
 
@@ -201,7 +230,8 @@ async function previewAddSeatsSubscriptionChange(req, res) {
       error instanceof MissingBillingInfoError ||
       error instanceof ManuallyCollectedError ||
       error instanceof PendingChangeError ||
-      error instanceof InactiveError
+      error instanceof InactiveError ||
+      error instanceof HasPastDueInvoiceError
     ) {
       return res.status(422).end()
     }
@@ -233,7 +263,8 @@ async function createAddSeatsSubscriptionChange(req, res) {
     const create =
       await SubscriptionGroupHandler.promises.createAddSeatsSubscriptionChange(
         userId,
-        req.body.adding
+        req.body.adding,
+        req.body.poNumber
       )
 
     res.json(create)
@@ -242,7 +273,8 @@ async function createAddSeatsSubscriptionChange(req, res) {
       error instanceof MissingBillingInfoError ||
       error instanceof ManuallyCollectedError ||
       error instanceof PendingChangeError ||
-      error instanceof InactiveError
+      error instanceof InactiveError ||
+      error instanceof HasPastDueInvoiceError
     ) {
       return res.status(422).end()
     }
@@ -266,11 +298,27 @@ async function createAddSeatsSubscriptionChange(req, res) {
 async function submitForm(req, res) {
   const userId = SessionManager.getLoggedInUserId(req.session)
   const userEmail = await UserGetter.promises.getUserEmail(userId)
-  const { adding } = req.body
+  const { adding, poNumber } = req.body
+
+  const { recurlySubscription } =
+    await SubscriptionGroupHandler.promises.getUsersGroupSubscriptionDetails(
+      userId
+    )
+
+  if (recurlySubscription.isCollectionMethodManual) {
+    await SubscriptionGroupHandler.promises.updateSubscriptionPaymentTerms(
+      userId,
+      recurlySubscription,
+      poNumber
+    )
+  }
 
   const messageLines = [`\n**Overleaf Sales Contact Form:**`]
   messageLines.push('**Subject:** Self-Serve Group User Increase Request')
   messageLines.push(`**Estimated Number of Users:** ${adding}`)
+  if (poNumber) {
+    messageLines.push(`**PO Number:** ${poNumber}`)
+  }
   messageLines.push(
     `**Message:** This email has been generated on behalf of user with email **${userEmail}** ` +
       'to request an increase in the total number of users for their subscription.'
@@ -286,20 +334,6 @@ async function submitForm(req, res) {
 
   await Modules.promises.hooks.fire('sendSupportRequest', data)
   res.sendStatus(204)
-}
-
-async function flexibleLicensingSplitTest(req, res, next) {
-  const { variant } = await SplitTestHandler.promises.getAssignment(
-    req,
-    res,
-    'flexible-group-licensing'
-  )
-
-  if (variant !== 'enabled') {
-    return ErrorController.notFound(req, res)
-  }
-
-  next()
 }
 
 async function subscriptionUpgradePage(req, res) {
@@ -377,6 +411,12 @@ async function manuallyCollectedSubscription(req, res) {
     const subscription =
       await SubscriptionLocator.promises.getUsersSubscription(userId)
 
+    await SplitTestHandler.promises.getAssignment(
+      req,
+      res,
+      'flexible-group-licensing-for-manually-billed-subscriptions'
+    )
+
     res.render('subscriptions/manually-collected-subscription', {
       groupName: subscription.teamName,
     })
@@ -409,7 +449,6 @@ export default {
   removeSelfFromGroup: expressify(removeSelfFromGroup),
   addSeatsToGroupSubscription: expressify(addSeatsToGroupSubscription),
   submitForm: expressify(submitForm),
-  flexibleLicensingSplitTest: expressify(flexibleLicensingSplitTest),
   previewAddSeatsSubscriptionChange: expressify(
     previewAddSeatsSubscriptionChange
   ),

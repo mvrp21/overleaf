@@ -30,6 +30,7 @@ export type DropdownProps = {
 export type DropdownItemProps = PropsWithChildren<{
   active?: boolean
   as?: ElementType
+  type?: string
   description?: ReactNode
   disabled?: boolean
   eventKey?: string | number
@@ -45,6 +46,7 @@ export type DropdownItemProps = PropsWithChildren<{
   target?: string
   download?: boolean | string
   rel?: string
+  translate?: React.HTMLAttributes<HTMLElement>['translate']
 }>
 
 export type DropdownToggleProps = PropsWithChildren<{
